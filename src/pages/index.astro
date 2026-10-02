@@ -125,6 +125,12 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           </p>
         </section>
       </div>
+
+      <!-- 终章扇子文案：卡片收拢成扇后浮现 -->
+      <div id="fancap" aria-hidden="true">
+        <span class="fc-big">到头了。</span>
+        <span class="fc-sub">这是一副牌 · 往回滚，它们会回去躺好</span>
+      </div>
     </div>
   </section>
 </Base>
@@ -159,6 +165,20 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       [0.35, 1.0],
     ];
 
+    // 终章扇子 + 滚轴变形的状态
+    const panels = [...track.children];
+    const fanEls = panels.filter((el) => el.classList.contains('slot'));
+    const FAN_START = 0.86;      // 扇子阶段起始的滚动进度
+    let prevS = 0, vSmooth = 0, fanSmooth = 0;
+    let slotY = 0, slotH = 0, slotW = 0;
+    const measureFan = () => {
+      const r0 = fanEls[0]?.getBoundingClientRect();
+      if (r0) { slotY = r0.top; slotH = r0.height; slotW = r0.width; }
+    };
+    measureFan();
+    addEventListener('resize', () => measureFan());
+    const fanCap = document.getElementById('fancap');
+
     (window as any).__fx = (window as any).__fx || [];
     (window as any).__fx.push(() => {
       const r = journey.getBoundingClientRect();
@@ -174,6 +194,44 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         const lp = Math.min(1, Math.max(0, (p - a) / (b - a)));
         path.style.strokeDashoffset = String(1 - lp);
       });
+
+      // 滚轴变形：滚动速度 → 卡片斜切（快速拨滚轮时像滚轴卷过）
+      const v = S - prevS; prevS = S;
+      vSmooth += (v - vSmooth) * 0.12;
+      const skew = Math.max(-7, Math.min(7, vSmooth * 0.05));
+
+      // 终章扇子：所有卡片飞拢成摞，再绕轴展开成扇（可逆）
+      const fanRaw = Math.max(0, Math.min(1, (p - FAN_START) / (1 - FAN_START)));
+      fanSmooth += (fanRaw - fanSmooth) * 0.16;
+      const ft = Math.max(0, Math.min(1, fanSmooth));
+      const ease = ft * ft * (3 - 2 * ft);                    // smoothstep
+      const gather = Math.min(1, ease / 0.45);                // 0→1 飞拢成摞
+      const spread = ease <= 0.45 ? 0 : (ease - 0.45) / 0.55; // 0→1 展开成扇
+      if (ft < 0.01) measureFan();                            // 仅在未变形时校准几何
+      const cx = innerWidth / 2, cy = innerHeight / 2;
+
+      panels.forEach((el) => {
+        if (!el.classList.contains('slot')) {
+          // 画布文字（宣言/结尾）在扇子阶段让位淡出
+          el.style.opacity = String(1 - Math.min(1, ft * 1.6));
+          el.style.transform = `skewX(${skew.toFixed(2)}deg)`;
+          return;
+        }
+        const i = fanEls.indexOf(el);
+        const th = (-32 + (64 * i) / (fanEls.length - 1)) * spread;
+        const sc = 1 - gather * 0.45;                         // 1 → 0.55
+        const px = el.offsetLeft - S;                         // 卡片当前在视口中的 x（跟随轨道）
+        const tx = (cx - slotW / 2 - px) * gather;
+        const ty = (cy - slotH / 2 + 26 - slotY) * gather;
+        el.style.transformOrigin = '50% 118%';
+        el.style.zIndex = ft > 0.01 ? String(20 + i) : '';
+        el.style.transform =
+          `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) ` +
+          `rotate(${th.toFixed(2)}deg) scale(${sc.toFixed(3)}) skewX(${skew.toFixed(2)}deg)`;
+      });
+
+      // 扇上文案
+      if (fanCap) fanCap.style.opacity = String(Math.max(0, ft * 1.5 - 0.5));
 
       // 海报卡内部字体平移：卡片进入视野开始，到达视口中心时滑到末位，之后冻结
       for (const el of posters) {
