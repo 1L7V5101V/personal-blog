@@ -157,6 +157,17 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   transform: scale(1.025);
 }
 
+/* 弯牌分段：飞行时把牌横切成多条（中条是原牌，其余是克隆），落定后移除。
+   必须用 !important 压过后面 .poster/.hero-card 等规则里的 position，否则克隆片会回到流里竖着排。 */
+.slot > .bend-seg {
+  position: absolute !important;
+  inset: 0 !important;
+  margin: 0 !important;
+  pointer-events: none;
+  transition: none !important;
+  will-change: transform;
+}
+
 /* 槽位：卡外元素（标签/图注/提示）全部绝对定位，槽内只有卡，保证所有卡垂直中心对齐 */
 .slot {
   flex: none;

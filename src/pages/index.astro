@@ -138,11 +138,12 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
   }
 
   if (journey && track && !mobile.matches && !reduced) {
-    const UNFOLD_DIST = 1800;   // 开场扇子放平占用的滚动距离（此间轨道 Hold 不动）
+    const UNFOLD_DIST = 1800;   // 牌堆展开回轨道占用的滚动距离（此间轨道 Hold 不动）
+    const INTRO_DIST = () => Math.max(560, innerHeight * 0.9); // 拉牌入场占用的滚动距离（滚动可正反擦洗）
     let dist = 0;
     const measure = () => {
       dist = Math.max(0, track.scrollWidth - innerWidth);
-      journey.style.height = `calc(100svh + ${dist + UNFOLD_DIST}px)`;
+      journey.style.height = `calc(100svh + ${dist + UNFOLD_DIST + INTRO_DIST()}px)`;
     };
     measure();
     addEventListener('resize', measure);
@@ -155,49 +156,130 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       [0.35, 1.0],
     ];
 
-    // 开场牌堆（S=0 居中一张、底下随机角度+微偏移堆叠，滚动平移展开）+ 滚轴变形
+    // 开场牌堆（拉牌入场落到屏幕中心：hero 正中最上、其余随机角度+微偏移堆叠）+ 滚轴变形
     const fanEls = [...track.querySelectorAll(':scope > .slot')];
     const N = fanEls.length;
     let prevStrack = 0, vSmooth = 0;
     let slotY = 0, slotH = 0, slotW = 0;
     const measureFan = () => {
+      // 先清掉 fx 设的 transform 再量，否则会量到飞行中的位置（入场由滚动驱动时尤其如此）
+      const saved = fanEls.map((e) => e.style.transform);
+      fanEls.forEach((e) => (e.style.transform = ''));
       const r0 = fanEls[0]?.getBoundingClientRect();
+      fanEls.forEach((e, i) => (e.style.transform = saved[i]));
       if (r0) { slotY = r0.top; slotH = r0.height; slotW = r0.width; }
     };
     measureFan();
-    addEventListener('resize', () => { if (scrollY < 2) measureFan(); });
+    addEventListener('resize', measureFan);
     const easeInOut = (t: number) => {
       const x = Math.max(0, Math.min(1, t));
       return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
     };
     // 牌堆位形：随机角度/偏移（每次加载洗一次牌）；顶牌 hero 不旋转、正中
     const pilePose = fanEls.map(() => ({
-      r: Math.random() * 14 - 7,     // -7° ~ 7°
-      x: Math.random() * 64 - 32,    // ±32px
-      y: Math.random() * 40 - 20,    // ±20px
-      spin: Math.random() * 50 - 25, // 落牌时边掉边转的额外角度
+      r: Math.random() * 14 - 7,       // 落位角度 -7° ~ 7°（乱牌堆）
+      x: Math.random() * 64 - 32,      // 落点横向偏移 ±32px
+      y: Math.random() * 40 - 20,      // 落点纵向偏移 ±20px
     }));
-    pilePose[0] = { r: 0, x: 0, y: 0, spin: 0 };
-    // 瀑布落牌：牌按次序从堆里逐张落下归位（0=同时，1=完全串行）
+    // hero：顶牌不旋转、正中、压轴落下
+    pilePose[0] = { r: 0, x: 0, y: 0 };
+    // 扇牌/瀑布共用级联顺序：0=同时，1=完全串行（底牌先、hero 压轴）
     const STAGGER = 0.55;
-    // 加载落牌入场：底牌先落、hero 最后盖上；从上方掉落 + 边掉边转
-    const enterT0 = performance.now();
-    const ENTER_DELAY = 0.09;   // 每张间隔（秒）
-    const ENTER_DUR = 0.75;     // 单张坠落时长（秒）
-    const skipEnter = scrollY > 50; // 刷新恢复到中途滚动位置时不播入场
-    const enterLocal = (i: number) => {
-      if (skipEnter) return 1;
-      const t = (performance.now() - enterT0) / 1000;
-      const delay = (N - 1 - i) * ENTER_DELAY; // i=N-1 最底牌先落，hero 压轴
-      return Math.max(0, Math.min(1, (t - delay) / ENTER_DUR));
+
+    // 牌身自身的弯曲（不是轨迹弯）：把牌横切成 11 条——中条用原牌，其余克隆，
+    // 折角自顶边 0° 到底边 BEND_MAX 单向递增（所有条朝同一方向折）→ 牌整体卷成一条弧（像一个括号），
+    // 而不是两端对称的碗；近的那端自然大、远的那端自然小（近大远小）。
+    // 折角归 0 时移除克隆，牌恢复成一张平的标准矩形。
+    const BEND_MAX = 26;   // 整张牌卷过的总角度（度）：从顶边到底边的累计
+    const BEND_N = 11;     // 横切条数（奇数）；条数越多接缝折角越小、越不像被切开
+    const BEND_PERS = 900; // 视点距离：越小纵深收敛越明显，近大远小越看得出来
+    const bendSegs: (HTMLElement[] | null)[] = fanEls.map(() => null);
+    const applyBend = (i: number, deg: number) => {
+      const el = fanEls[i];
+      const card = el.firstElementChild as HTMLElement | null;
+      if (!card) return;
+      let segs = bendSegs[i];
+      if (deg < 0.5) {
+        // 落定：撤掉分段，牌就是一张平的标准长方形
+        if (!segs) return;
+        card.style.clipPath = '';
+        card.style.transformOrigin = '50% 50%';
+        card.style.clipPath = '';
+        card.style.transform = '';
+        card.style.transition = '';
+        segs.forEach((s) => { if (s !== card) s.remove(); });
+        el.style.perspective = '';
+        bendSegs[i] = null;
+        return;
+      }
+      if (!segs) {
+        // 懒建 + 从当前牌现拍，保证内联样式（如海报大字位置）与本体一致
+        const band = (k: number) => {
+          const a = Math.max(0, (k * 100) / BEND_N - 0.06);
+          const b = Math.max(0, 100 - ((k + 1) * 100) / BEND_N - 0.06);
+          return `inset(${a.toFixed(2)}% 0 ${b.toFixed(2)}%)`; // 上下切 → 宽度方向弯
+        };
+        const mid = (BEND_N - 1) / 2;
+        const list: HTMLElement[] = [];
+        for (let k = 0; k < BEND_N; k++) {
+          if (k === mid) { list.push(card); continue; } // 中条用本体
+          const c = card.cloneNode(true) as HTMLElement;
+          c.classList.add('bend-seg');
+          c.setAttribute('aria-hidden', 'true');
+          c.setAttribute('inert', '');
+          c.style.clipPath = band(k);
+          el.appendChild(c);
+          list.push(c);
+        }
+        card.style.transition = 'none'; // 弯的时候别被 hover 的 transform 过渡拖住
+        card.style.transformOrigin = '50% 50%';
+        card.style.clipPath = band(mid);
+        el.style.perspective = `${BEND_PERS}px`; // 各条共享一个视点，折面才连得上
+        segs = list;
+        bendSegs[i] = list;
+      }
+      // 折面链：角度自顶边 0° 到底边 deg 单向递增（单向卷曲 = 括号形）；
+      // 中条以自身中心为轴先折一半，然后上下两条链各自沿弧累计接缝位置（纵向 + 纵深）
+      const mid = (BEND_N - 1) / 2;
+      const h = card.clientHeight / BEND_N;           // 单条高度
+      const rad = (d: number) => (d * Math.PI) / 180;
+      const amt = (k: number) => (deg * k) / (BEND_N - 1);
+      const put = (seg: HTMLElement, originY: number, ty: number, tz: number, ang: number) => {
+        seg.style.transformOrigin = `50% ${((originY / (h * BEND_N)) * 100).toFixed(3)}%`;
+        seg.style.transform = `translate3d(0px, ${ty.toFixed(2)}px, ${tz.toFixed(2)}px) rotateX(${ang.toFixed(2)}deg)`;
+      };
+      const phiMid = amt(mid), thMid = rad(phiMid);
+      segs[mid].style.transformOrigin = '50% 50%';
+      segs[mid].style.transform = `rotateX(${phiMid.toFixed(2)}deg)`;
+      // 下链：从中条下缘往下，每片绕自身【上缘】折
+      let yD = (mid + 0.5) * h + (h / 2) * Math.cos(thMid);
+      let zD = (h / 2) * Math.sin(thMid);
+      for (let k = mid + 1; k < BEND_N; k++) {
+        const a = amt(k), th = rad(a);
+        put(segs[k], k * h, yD - k * h, zD, a);
+        yD += h * Math.cos(th);
+        zD += h * Math.sin(th);
+      }
+      // 上链：从中条上缘往上，每片绕自身【下缘】折
+      let yU = (mid + 0.5) * h - (h / 2) * Math.cos(thMid);
+      let zU = -(h / 2) * Math.sin(thMid);
+      for (let k = mid - 1; k >= 0; k--) {
+        const a = amt(k), th = rad(a);
+        put(segs[k], (k + 1) * h, yU - (k + 1) * h, zU, a);
+        yU -= h * Math.cos(th);
+        zU -= h * Math.sin(th);
+      }
     };
 
     (window as any).__fx = (window as any).__fx || [];
     (window as any).__fx.push(() => {
       const r = journey.getBoundingClientRect();
       const S = Math.max(0, -r.top);
-      // 展开期（前 UNFOLD_DIST）轨道 Hold 不动，铺平完成后 conveyor 才启动
-      const STrack = Math.max(0, S - UNFOLD_DIST);
+      // 第一段：拉牌入场（S ∈ [0, INTRO_DIST]）——直接由滚动位置驱动，向上滚即反向擦洗
+      const introRaw = Math.max(0, Math.min(1, S / INTRO_DIST()));
+      // 第二段：展开期（前 UNFOLD_DIST）轨道 Hold 不动，铺平完成后 conveyor 才启动
+      const SUnfold = Math.max(0, S - INTRO_DIST());
+      const STrack = Math.max(0, SUnfold - UNFOLD_DIST);
       const p = dist > 0 ? Math.min(1, STrack / dist) : 0;
 
       // 整条轨道：放平完成后，垂直滚动进度 → 水平位移
@@ -215,18 +297,30 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       vSmooth += (v - vSmooth) * 0.12;
       const skew = Math.max(-7, Math.min(7, vSmooth * 0.05));
 
-      // 开场牌堆：S=0 居中一张卡、底下随机角度+微偏移堆叠；滚动 = 平移展开回轨道，牌不缩放
-      const flyRaw = Math.max(0, Math.min(1, S / UNFOLD_DIST));
+      // 花切拉牌：先落到屏幕中心牌堆，之后滚动再平移展开回轨道（牌不缩放）
+      const flyRaw = Math.max(0, Math.min(1, SUnfold / UNFOLD_DIST));
       const flyPe = easeInOut(flyRaw);
-      const vh = innerHeight;
+      const vw = innerWidth, vh = innerHeight;
       const cx = innerWidth / 2, cy = innerHeight / 2;
 
+      // 拉牌：一条直线。牌从屏幕外的“顺时针 100°”方向被一张张拉进牌堆，
+      // 所有牌走同一条线、同一个朝向（不是扇形），只有先后之分
+      const ENTRY_DEG = 100;                                    // 入口方向：自正上方顺时针 100°（右下屏外）
+      const ENTRY_RAD = (ENTRY_DEG * Math.PI) / 180;
+      const dirX = Math.sin(ENTRY_RAD);                          // ≈ 0.985（往右）
+      const dirY = -Math.cos(ENTRY_RAD);                         // ≈ 0.174（略往下）
+      const PERSP = 1500;                                        // 与下面 transform 里的 perspective(...) 必须一致
+      const FLY_Z = Math.max(300, slotW * 0.4);                  // 拉出来的牌离镜头更近 → 比落定时更大
+      const MAG = PERSP / (PERSP - FLY_Z);                       // 起点的放大倍率
+      const FLY_LEN = ((vw + slotW * MAG) / 2 / dirX) * 1.06;    // 起点足够远：放大后整张牌仍在视口外
+
       fanEls.forEach((el, i) => {
-        // 瀑布落牌：底下的牌先走，顶牌 hero 压轴最后归位（避免顶牌展开时遮住后面的牌）
+        // 底牌先甩出去、hero 压轴（避免顶牌展开时遮住后面的牌）
         const t0 = ((N - 1 - i) / (N - 1)) * STAGGER;
         const flyPe = easeInOut((flyRaw - t0) / (1 - STAGGER));
         if (flyRaw >= 0.999) {
           // 完全铺平后回归中性 transform（只留滚轴斜切）
+          applyBend(i, 0);
           if (el.style.transformOrigin) { el.style.transformOrigin = ''; el.style.zIndex = ''; }
           el.style.transform = `skewX(${skew.toFixed(2)}deg)`;
           const tg = el.querySelector<HTMLElement>('.tag');
@@ -234,16 +328,31 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           return;
         }
         const pp = pilePose[i];
-        const landPe = 1 - Math.pow(1 - enterLocal(i), 3); // easeOutCubic 落地
+        // 甩牌进度：与展开同一级联顺序，由 introRaw 驱动（可正可反）
+        const enterRaw = Math.max(0, Math.min(1, (introRaw - t0) / (1 - STAGGER)));
+        const landPe = 1 - Math.pow(1 - enterRaw, 2); // easeOutQuad：进堆时减速
         const naturalX = el.offsetLeft - STrack;
-        const tx = (cx - slotW / 2 + pp.x - naturalX) * (1 - flyPe);
-        // 落牌：从上方 0.8vh + 依序错位处掉入，spin 收转
-        const ty = (cy - slotH / 2 + pp.y - slotY) * (1 - flyPe) - (1 - landPe) * (vh * 0.8 + i * 30);
+        // 直线位置：从屏外沿 dir 一直滑到居中牌堆位；同一条线、同一朝向，只有先后之分
+        const back = 1 - landPe;   // 还没走完的比例
+        const endX = cx - slotW / 2 + pp.x * landPe;
+        const endY = cy - slotH / 2 + pp.y * landPe;
+        const lineX = endX + dirX * FLY_LEN * back;
+        const lineY = endY + dirY * FLY_LEN * back;
+        const lineZ = FLY_Z * back;            // 近大远小：正在飞的牌离镜头更近 → 更大，落定回到原尺寸
+        // 透视是以牌自己的布局中心为原点缩放的，会把平移量一起压缩 → 先按比例放大补回来，
+        // 否则每张牌的直线路径都会向它在轨道里的原位置偏（越远偏得越多），不再是同一条线
+        const pers = 1 - lineZ / PERSP;
+        const tx = (lineX - naturalX) * pers * (1 - flyPe);
+        const ty = (lineY - slotY) * pers * (1 - flyPe);
+        // 入场不做平面旋转（pp.r 恒为 0）→ 落到屏幕上就是一个标准长方形
+        const theta = pp.r * (1 - flyPe);
+        // 牌身自身的弯曲：牌一进画面就是最弯的（BEND_MAX），接近牌堆时逐渐捋平，落定完全归 0
+        applyBend(i, BEND_MAX * Math.min(1, (1 - landPe) / 0.6) * (1 - flyPe));
         el.style.transformOrigin = '50% 50%';
         el.style.zIndex = String(20 + (N - i)); // hero 最上
-        el.style.opacity = String(Math.min(1, 0.25 + landPe));
+        el.style.opacity = '1'; // 飞行全程实心（源头在屏外，无需淡入）
         el.style.transform =
-          `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) rotate(${((pp.r + (1 - landPe) * pp.spin) * (1 - flyPe)).toFixed(2)}deg) skewX(${skew.toFixed(2)}deg)`;
+          `perspective(${PERSP}px) translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, ${lineZ.toFixed(1)}px) rotate(${theta.toFixed(2)}deg) skewX(${skew.toFixed(2)}deg)`;
       });
 
       // 海报卡内部字体平移：卡片进入视野开始，到达视口中心时滑到末位，之后冻结
