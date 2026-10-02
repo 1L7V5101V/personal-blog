@@ -98,32 +98,26 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 }
 [data-io].in { opacity: 1; transform: none; }
 
-/* ---------- 横向展区 ---------- */
-.hwrap { position: relative; }
-.hsticky {
+/* ---------- 整页横向 journey ---------- */
+.journey { position: relative; }
+.stage {
   position: sticky;
   top: 0;
   height: 100svh;
   overflow: hidden;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2.5rem;
+  align-items: center;
 }
-.hhead {
-  width: min(72rem, calc(100vw - 3rem));
-  margin-inline: auto;
+.track {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
+  gap: clamp(3rem, 7vw, 7rem);
+  padding-inline: clamp(1.5rem, 8vw, 10rem);
+  width: max-content;
+  will-change: transform;
+  position: relative;
+  z-index: 1;
 }
-.hhead .label {
-  font-size: 0.8rem;
-  letter-spacing: 0.14em;
-  color: var(--fg-3);
-  text-transform: uppercase;
-}
-.hhead .hint { font-size: 0.8rem; color: var(--fg-3); }
 
 .hline {
   position: absolute;
@@ -139,24 +133,40 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   stroke-width: 1.5;
 }
 
-.htrack {
-  display: flex;
-  align-items: center;
-  gap: clamp(1.5rem, 4vw, 4rem);
-  padding-inline: clamp(1.5rem, 8vw, 8rem);
-  width: max-content;
-  will-change: transform;
-  position: relative;
-  z-index: 1;
+.panel { flex: none; }
+.panel .label {
+  display: block;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  color: var(--fg-3);
+  text-transform: uppercase;
+  margin-bottom: 1.4rem;
 }
 
+/* hero 面板 */
+.hero { width: min(56rem, 82vw); }
+.hero h1 {
+  margin: 0 0 1.2rem;
+  font-size: clamp(3rem, 9vw, 6.5rem);
+  line-height: 1.05;
+}
+.hero .bio {
+  margin: 0 0 5vh;
+  color: var(--fg-2);
+  font-size: 1.05rem;
+  max-width: 34rem;
+}
+.hero .hint { color: var(--fg-3); font-size: 0.85rem; }
+.mask { display: inline-block; overflow: hidden; vertical-align: bottom; }
+.mask > span { display: inline-block; }
+
+/* 图片卡（悬停虚化 + 呼吸缩放 + 幕帘进场） */
 .hcard { flex: none; width: clamp(18rem, 30vw, 26rem); }
 .hcard figure { margin: 0; }
 .hcard .imgbox {
   aspect-ratio: 3 / 2;
   overflow: hidden;
   background: var(--bg-raise);
-  /* 幕帘：横向展开进场 */
   clip-path: inset(0 100% 0 0);
   transition: clip-path 1.1s var(--ease-out);
 }
@@ -166,14 +176,12 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   height: 100%;
   object-fit: cover;
   display: block;
-  /* 滑动经过呼吸缩放（JS 写入 --ps） */
   transform: scale(var(--ps, 1));
   transition:
     filter 0.5s var(--ease-out),
     transform 0.5s var(--ease-out);
   will-change: filter;
 }
-/* 悬停虚化 + 放大 */
 @media (hover: hover) {
   .hcard:hover img {
     filter: blur(14px) saturate(0.7) brightness(0.8);
@@ -197,30 +205,86 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   color: var(--fg-2);
 }
 
-.hend {
+/* 纯文字卡：过中心后加速滑向末尾（--extra 由 JS 写入） */
+.tcard {
   flex: none;
-  width: 14rem;
-  text-align: center;
-  color: var(--fg-2);
-  font-size: 0.95rem;
+  width: clamp(20rem, 30vw, 27rem);
+  aspect-ratio: 3 / 2;
+  background: var(--bg-raise);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  padding: 2rem;
+  transform: translateX(calc(var(--extra, 0px) * -1));
+  transition: border-color 0.4s;
+  display: block;
 }
-
-/* 移动端：退化为原生横滑 */
-@media (max-width: 768px) {
-  .hwrap { height: auto !important; }
-  .hsticky {
-    position: static;
-    height: auto;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    padding-block: 2rem;
-  }
-  .htrack { transform: none !important; }
-  .hcard { scroll-snap-align: center; }
-  .hline { display: none; }
+.tcard:hover { border-color: #343434; }
+.tcard .tin {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
 }
+.tcard .q {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 3rem;
+  line-height: 0.6;
+  color: var(--fg-3);
+}
+.tcard .big {
+  margin: 0;
+  font-size: clamp(1.3rem, 2.2vw, 1.7rem);
+  font-weight: 550;
+  letter-spacing: -0.02em;
+  line-height: 1.45;
+}
+.tcard .stat {
+  margin: 0;
+  font-size: clamp(3rem, 5vw, 4.2rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+.tcard .stat span { font-size: 0.4em; color: var(--fg-3); margin-left: 0.15em; }
+.tcard .sub { font-size: 0.85rem; color: var(--fg-3); transition: color 0.3s; }
+.tcard:hover .sub { color: var(--fg); }
 
-/* ---------- 文章列表 ---------- */
+/* 列表面板 */
+.listpanel { width: min(46rem, 80vw); }
+
+/* 宣言面板 */
+.manifesto {
+  width: min(40rem, 70vw);
+  font-size: clamp(1.4rem, 2.4vw, 2rem);
+  font-weight: 550;
+  letter-spacing: -0.02em;
+  line-height: 2;
+}
+.manifesto p { margin: 0; }
+
+/* 结尾面板 */
+.endpanel { width: min(30rem, 60vw); }
+.endpanel .big {
+  margin: 0 0 1rem;
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-weight: 550;
+}
+.endpanel p { color: var(--fg-2); margin: 0; }
+.endpanel a { border-bottom: 1px solid var(--fg-3); transition: color 0.3s, border-color 0.3s; }
+.endpanel a:hover { color: #fff; border-color: var(--fg); }
+.endpanel button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid var(--fg-3);
+  padding: 0;
+  transition: color 0.3s, border-color 0.3s;
+}
+.endpanel button:hover { color: #fff; border-color: var(--fg); }
+
+/* ---------- 文章列表（列表页 & 列表面板共用） ---------- */
 .list { display: flex; flex-direction: column; }
 .row {
   display: flex;
@@ -233,16 +297,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .row .t { font-weight: 550; }
 .row .m { font-size: 0.85rem; color: var(--fg-3); white-space: nowrap; }
 .row:hover .t { color: #fff; }
-
-/* ---------- 宣言块 ---------- */
-.manifesto {
-  padding-block: 8rem;
-  font-size: clamp(1.3rem, 2.6vw, 1.8rem);
-  font-weight: 550;
-  letter-spacing: -0.02em;
-  line-height: 2.1;
-}
-.manifesto .dim { color: var(--fg-3); }
 
 /* ---------- 页脚 ---------- */
 footer.site {
@@ -366,7 +420,7 @@ footer.site {
 .tl-item h3 { margin: 0.2rem 0 0.4rem; font-size: 1.05rem; }
 .tl-item p { margin: 0; color: var(--fg-2); font-size: 0.95rem; }
 
-/* ---------- 通用 section 标题 ---------- */
+/* ---------- 通用 section 标题（About 用） ---------- */
 .sec {
   padding-block: 7rem 3rem;
   display: flex;
@@ -380,6 +434,27 @@ footer.site {
   text-transform: uppercase;
 }
 
+/* ---------- 移动端：横向轨道退化为原生滑动 ---------- */
+@media (max-width: 768px) {
+  .journey { height: auto !important; }
+  .stage {
+    position: static;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    padding-block: 5rem;
+    scrollbar-width: none;
+  }
+  .stage::-webkit-scrollbar { display: none; }
+  .track { transform: none !important; gap: 1.5rem; padding-inline: 1.5rem; }
+  .hero, .listpanel, .manifesto, .endpanel { width: 85vw; min-width: 85vw; }
+  .hcard, .tcard { width: 78vw; }
+  .hcard, .tcard, .panel { scroll-snap-align: center; }
+  [data-speed] { transform: none !important; }
+  .hline { display: none; }
+}
+
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -388,4 +463,8 @@ footer.site {
   }
   [data-reveal], [data-io] { opacity: 1 !important; transform: none !important; }
   .hcard .imgbox { clip-path: none !important; }
+  .journey { height: auto !important; }
+  .stage { position: static; height: auto; overflow: visible; }
+  .track { transform: none !important; flex-wrap: wrap; }
+  [data-speed] { transform: none !important; }
 }
