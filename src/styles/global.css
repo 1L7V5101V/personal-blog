@@ -133,13 +133,13 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   stroke-width: 1.5;
 }
 
-/* 槽位：小标签在卡片上方（rauno 式） */
+/* 槽位：小标签在卡片上方（rauno 式）；所有主卡统一尺寸 */
 .slot {
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  width: min(60vw, 56rem);
+  width: min(75vw, 76rem);
 }
 .slot .tag {
   font-size: 11px;
@@ -150,14 +150,14 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   text-overflow: ellipsis;
 }
 
-/* hero：白卡 + 阶梯缩进 + 黄圆 */
-.heroeslot { width: min(64rem, 72vw); }
+/* hero：白卡 + 阶梯缩进 + 黄圆（与其他卡同尺寸） */
+.heroeslot { width: min(75vw, 76rem); }
 .hero-card {
   position: relative;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  aspect-ratio: 5 / 3;
+  aspect-ratio: 16 / 9;
   background: var(--card);
   overflow: hidden;
   padding: clamp(2.5rem, 5vw, 4.5rem);
@@ -208,7 +208,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   height: 100%;
   object-fit: cover;
   display: block;
-  transform: scale(var(--ps, 1));
   transition:
     filter 0.5s var(--ease-out),
     transform 0.5s var(--ease-out);
@@ -217,7 +216,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 @media (hover: hover) {
   .hcard:hover img {
     filter: blur(14px) saturate(0.7) brightness(0.92);
-    transform: scale(calc(var(--ps, 1) * 1.04));
+    transform: scale(1.04);
   }
   .hcard:hover figcaption .go { opacity: 1; transform: none; }
 }
@@ -248,16 +247,16 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 }
 .poster .pword {
   position: absolute;
-  left: -2%;
+  left: 50%;
   bottom: -7%;
   z-index: 1;
+  transform: translateX(calc(-50% + var(--pan, 0px)));
   font-size: clamp(9rem, 22vw, 22rem);
   font-weight: 650;
   letter-spacing: -0.05em;
   line-height: 0.82;
   white-space: nowrap;
   color: var(--fg);
-  transition: transform 0.6s var(--ease-out);
 }
 .poster .pdot {
   width: 48%;
@@ -276,7 +275,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 }
 @media (hover: hover) {
   .poster:hover .pdot { transform: scale(1.14); }
-  .poster:hover .pword { transform: translateX(-1.2rem); }
 }
 
 /* 纯文字卡快进：--extra 由 JS 写入 */
