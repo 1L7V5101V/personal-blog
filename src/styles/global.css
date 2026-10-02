@@ -111,7 +111,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .track {
   display: flex;
   align-items: center;
-  gap: clamp(3rem, 7vw, 7rem);
+  gap: clamp(4rem, 8vw, 9rem);
   padding-inline: clamp(1.5rem, 8vw, 10rem);
   width: max-content;
   will-change: transform;
@@ -143,28 +143,28 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   margin-bottom: 1.4rem;
 }
 
-/* hero 面板 */
-.hero { width: min(56rem, 82vw); }
+/* hero 面板：整屏开场 */
+.hero { width: 100vw; }
 .hero h1 {
-  margin: 0 0 1.2rem;
-  font-size: clamp(3rem, 9vw, 6.5rem);
-  line-height: 1.05;
+  margin: 0 0 1.6rem;
+  font-size: clamp(4rem, 11vw, 9rem);
+  line-height: 1.02;
 }
 .hero .bio {
-  margin: 0 0 5vh;
+  margin: 0 0 6vh;
   color: var(--fg-2);
-  font-size: 1.05rem;
-  max-width: 34rem;
+  font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+  max-width: 40rem;
 }
-.hero .hint { color: var(--fg-3); font-size: 0.85rem; }
+.hero .hint { color: var(--fg-3); font-size: 0.9rem; }
 .mask { display: inline-block; overflow: hidden; vertical-align: bottom; }
 .mask > span { display: inline-block; }
 
-/* 图片卡（悬停虚化 + 呼吸缩放 + 幕帘进场） */
-.hcard { flex: none; width: clamp(18rem, 30vw, 26rem); }
+/* 图片卡：电影感大图，无圆角无边框 */
+.hcard { flex: none; width: min(60vw, 56rem); }
 .hcard figure { margin: 0; }
 .hcard .imgbox {
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   background: var(--bg-raise);
   clip-path: inset(0 100% 0 0);
@@ -185,7 +185,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 @media (hover: hover) {
   .hcard:hover img {
     filter: blur(14px) saturate(0.7) brightness(0.8);
-    transform: scale(calc(var(--ps, 1) * 1.06));
+    transform: scale(calc(var(--ps, 1) * 1.04));
   }
   .hcard:hover figcaption .go { opacity: 1; transform: none; }
 }
@@ -193,11 +193,11 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1rem;
-  padding-top: 0.9rem;
+  gap: 1.5rem;
+  padding-top: 1.1rem;
 }
-.hcard .t { font-size: 1.05rem; font-weight: 550; letter-spacing: -0.01em; }
-.hcard .d { font-size: 0.8rem; color: var(--fg-3); white-space: nowrap; }
+.hcard .t { font-size: clamp(1.1rem, 1.8vw, 1.45rem); font-weight: 550; letter-spacing: -0.01em; }
+.hcard .d { font-size: 0.85rem; color: var(--fg-3); white-space: nowrap; }
 .hcard .go {
   opacity: 0;
   transform: translateX(-6px);
@@ -205,71 +205,66 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   color: var(--fg-2);
 }
 
-/* 纯文字卡：过中心后加速滑向末尾（--extra 由 JS 写入） */
+/* 纯文字卡：纯色整版，无圆角无边框；过中心后加速滑向末尾（--extra 由 JS 写入） */
 .tcard {
   flex: none;
-  width: clamp(20rem, 30vw, 27rem);
-  aspect-ratio: 3 / 2;
+  width: min(60vw, 56rem);
+  aspect-ratio: 16 / 9;
   background: var(--bg-raise);
-  border: 1px solid var(--hairline);
-  border-radius: 14px;
-  padding: 2rem;
   transform: translateX(calc(var(--extra, 0px) * -1));
-  transition: border-color 0.4s;
   display: block;
 }
-.tcard:hover { border-color: #343434; }
 .tcard .tin {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   height: 100%;
+  padding: clamp(1.8rem, 4vw, 3.5rem);
 }
 .tcard .q {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 3rem;
+  font-size: clamp(2.6rem, 5vw, 4.2rem);
   line-height: 0.6;
   color: var(--fg-3);
 }
 .tcard .big {
   margin: 0;
-  font-size: clamp(1.3rem, 2.2vw, 1.7rem);
+  font-size: clamp(1.8rem, 3.6vw, 3.2rem);
   font-weight: 550;
   letter-spacing: -0.02em;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 .tcard .stat {
   margin: 0;
-  font-size: clamp(3rem, 5vw, 4.2rem);
+  font-size: clamp(4rem, 8vw, 7.5rem);
   font-weight: 600;
   letter-spacing: -0.04em;
   line-height: 1;
 }
-.tcard .stat span { font-size: 0.4em; color: var(--fg-3); margin-left: 0.15em; }
-.tcard .sub { font-size: 0.85rem; color: var(--fg-3); transition: color 0.3s; }
-.tcard:hover .sub { color: var(--fg); }
+.tcard .stat span { font-size: 0.35em; color: var(--fg-3); margin-left: 0.12em; }
+.tcard .sub { font-size: 0.95rem; color: var(--fg-2); }
 
 /* 列表面板 */
-.listpanel { width: min(46rem, 80vw); }
+.listpanel { width: min(52rem, 80vw); }
 
 /* 宣言面板 */
 .manifesto {
-  width: min(40rem, 70vw);
-  font-size: clamp(1.4rem, 2.4vw, 2rem);
+  width: min(46rem, 80vw);
+  font-size: clamp(2rem, 4vw, 3.2rem);
   font-weight: 550;
   letter-spacing: -0.02em;
-  line-height: 2;
+  line-height: 1.9;
 }
 .manifesto p { margin: 0; }
 
 /* 结尾面板 */
-.endpanel { width: min(30rem, 60vw); }
+.endpanel { width: min(40rem, 70vw); }
 .endpanel .big {
-  margin: 0 0 1rem;
-  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  margin: 0 0 1.2rem;
+  font-size: clamp(2.4rem, 5vw, 3.8rem);
   font-weight: 550;
 }
-.endpanel p { color: var(--fg-2); margin: 0; }
+.endpanel p { color: var(--fg-2); margin: 0; font-size: 1.05rem; }
 .endpanel a { border-bottom: 1px solid var(--fg-3); transition: color 0.3s, border-color 0.3s; }
 .endpanel a:hover { color: #fff; border-color: var(--fg); }
 .endpanel button {
@@ -290,11 +285,11 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1.1rem 0;
+  gap: 1.5rem;
+  padding: 1.4rem 0;
   border-bottom: 1px solid var(--hairline);
 }
-.row .t { font-weight: 550; }
+.row .t { font-weight: 550; font-size: 1.1rem; }
 .row .m { font-size: 0.85rem; color: var(--fg-3); white-space: nowrap; }
 .row:hover .t { color: #fff; }
 
@@ -448,8 +443,8 @@ footer.site {
   }
   .stage::-webkit-scrollbar { display: none; }
   .track { transform: none !important; gap: 1.5rem; padding-inline: 1.5rem; }
-  .hero, .listpanel, .manifesto, .endpanel { width: 85vw; min-width: 85vw; }
-  .hcard, .tcard { width: 78vw; }
+  .hero, .listpanel, .manifesto, .endpanel { width: 88vw; min-width: 88vw; }
+  .hcard, .tcard { width: 88vw; }
   .hcard, .tcard, .panel { scroll-snap-align: center; }
   [data-speed] { transform: none !important; }
   .hline { display: none; }

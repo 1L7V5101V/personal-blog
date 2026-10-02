@@ -23,12 +23,10 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       <div class="track">
         <!-- 1 · Hero -->
         <section class="panel hero">
-          <div data-slow>
-            <span class="label" data-reveal style="--i:0">il7510n · 个人博客</span>
-            <h1><span class="mask"><span data-reveal style="--i:1">il7510n</span></span></h1>
-            <p class="bio"><span class="mask"><span data-reveal style="--i:2">写代码，也写字。这里放慢一点，想清楚一点。</span></span></p>
-            <p class="hint" data-reveal style="--i:3">向下滚动，整页向右 →</p>
-          </div>
+          <span class="label" data-reveal style="--i:0">il7510n · 个人博客</span>
+          <h1><span class="mask"><span data-reveal style="--i:1">il7510n</span></span></h1>
+          <p class="bio"><span class="mask"><span data-reveal style="--i:2">写代码，也写字。这里放慢一点，想清楚一点。</span></span></p>
+          <p class="hint" data-reveal style="--i:3">向下滚动，整页向右 →</p>
         </section>
 
         <!-- 2 · 图片卡 -->
@@ -109,7 +107,6 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
   const curve = document.querySelector<SVGPathElement>('.hline path');
   const photoCards = [...document.querySelectorAll<HTMLElement>('.hcard')];
   const fastCards = [...document.querySelectorAll<HTMLElement>('[data-speed]')];
-  const slowEls = [...document.querySelectorAll<HTMLElement>('[data-slow]')];
   const mobile = matchMedia('(max-width: 768px)');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -123,9 +120,9 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
     addEventListener('resize', measure);
     addEventListener('load', measure);
 
-    const SPEED = 1.5;      // 纯文字卡相对轨道的速度倍率
-    const MAX_EXTRA = 480;  // 加速位移上限（末尾停车位）
-    const LERP = 0.085;     // 追赶平滑度
+    const SPEED = 1.8;      // 纯文字卡相对轨道的速度倍率
+    const MAX_EXTRA = 640;  // 加速位移上限（保证完全滑出屏幕）
+    const LERP = 0.12;      // 追赶平滑度
     const state = fastCards.map(() => ({ cur: 0 }));
 
     (window as any).__fx = (window as any).__fx || [];
@@ -140,11 +137,11 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       // 曲线描绘：滚多少画多少
       if (curve) curve.style.strokeDashoffset = String(1 - p);
 
-      // 纯文字卡：越过视口中心后以 SPEED 倍加速，lerp 追赶滑向末尾
+      // 纯文字卡：整卡完全离开视口中心后以 SPEED 倍爆发加速，lerp 追赶滑向末尾
       fastCards.forEach((el, i) => {
-        const layoutCenter = el.offsetLeft + el.offsetWidth / 2; // 布局位置（不受 transform 影响）
-        const crossesAt = layoutCenter - innerWidth / 2;         // 轨道位移到多少时它经过中心
-        const target = Math.max(0, Math.min((S - crossesAt) * (SPEED - 1), MAX_EXTRA));
+        const layoutCenter = el.offsetLeft + el.offsetWidth / 2;      // 布局位置（不受 transform 影响）
+        const fullyPastAt = layoutCenter + el.offsetWidth / 2 - innerWidth / 2; // 尾边越过中心点所需的轨道位移
+        const target = Math.max(0, Math.min((S - fullyPastAt) * (SPEED - 1), MAX_EXTRA));
         const st = state[i];
         st.cur += (target - st.cur) * LERP;
         el.style.setProperty('--extra', `${st.cur.toFixed(1)}px`);
@@ -156,12 +153,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         if (cr.right < 0 || cr.left > innerWidth) continue;
         const center = cr.left + cr.width / 2;
         const cp = Math.max(0, 1 - Math.abs(center - innerWidth / 2) / (innerWidth / 2));
-        card.style.setProperty('--ps', (0.92 + 0.08 * cp).toFixed(4));
-      }
-
-      // hero 慢速层：比轨道略慢，制造前后景深度
-      for (const el of slowEls) {
-        el.style.transform = `translateX(${(S * 0.12).toFixed(1)}px)`;
+        card.style.setProperty('--ps', (0.95 + 0.05 * cp).toFixed(4));
       }
     });
   }
