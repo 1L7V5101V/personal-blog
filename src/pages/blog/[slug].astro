@@ -24,4 +24,171 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       <Content />
     </article>
   </div>
+<!-- 阅读导引：左侧标尺（一行一条刻度）+ 视口正中的阅读横线 + 光球。
+       纯装饰，整层 pointer-events:none，不挡任何点击。 -->
+  <div class="readguide" aria-hidden="true">
+    <div class="readguide__ruler">
+      <!-- 光球在标尺**里面**（它要跟着标尺定位）；刻度单独一个内层容器，
+           因为 layout() 会 replaceChildren 重写刻度表，不能把球一起冲掉。 -->
+      <div class="readguide__ticks"></div>
+      <span class="readguide__ball"></span>
+    </div>
+    <div class="readguide__line"></div>
+  </div>
 </Base>
+
+<script>
+  // ---- 阅读导引 ----
+  // 左侧标尺把整篇文章压成一张地图：正文一行一条刻度，标题按层级给更长的刻度。
+  // 最长边 / 最短边固定（RG_MAX / RG_MIN），中间的层级按「本页实际存在的层级数」
+  // 线性重算 —— 只有 h1+h2 的文章和有 h1+h2+h3 的文章，中间那档长度不一样。
+  const prose = document.querySelector<HTMLElement>('.prose');
+  const guide = document.querySelector<HTMLElement>('.readguide');
+
+  if (prose && guide) {
+    const ruler = guide.querySelector<HTMLElement>('.readguide__ruler')!;
+    const ticksEl = guide.querySelector<HTMLElement>('.readguide__ticks')!;
+    const ball = guide.querySelector<HTMLElement>('.readguide__ball')!;
+
+    const RG_MAX = 64;        // 最长边（最大的标题），固定
+    const RG_MIN = 9;         // 最短边（正文行），固定
+    const BALL_MAX = 11;      // 光球最大直径
+    const BALL_MIN = 4.5;
+    const GAP_MAX = 26;       // 刻度间距上限（间距是自适应的，边长不是）
+    const GAP_MIN = 4;        // 再密就并成灰糊，钳在这
+    const PREFER = 28;        // 「更大层级优先」的判定距离
+
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    type Head = { level: number; idx: number; el: HTMLElement; top: number };
+    const ticks: (number | null)[] = [];   // null = 正文行
+    const heads: Head[] = [];
+    let levels: number[] = [];             // 本页实际存在的层级，升序
+    let lineH = 27;
+
+    // ---- 建刻度表：标题一条，正文按视觉行数一条一条 ----
+    function scan() {
+      ticks.length = 0;
+      heads.length = 0;
+      lineH = parseFloat(getComputedStyle(prose!).lineHeight) || 27;
+
+      for (const el of Array.from(prose!.children) as HTMLElement[]) {
+        if (/^H[1-6]$/.test(el.tagName)) {
+          const level = Number(el.tagName[1]);
+          heads.push({ level, idx: ticks.length, el, top: 0 });
+          ticks.push(level);
+        } else {
+          const n = el.tagName === 'PRE'
+            ? Math.max(1, (el.textContent ?? '').split('\n').length)
+            : Math.max(1, Math.round(el.getBoundingClientRect().height / lineH));
+          for (let i = 0; i < n; i++) ticks.push(null);
+        }
+      }
+      levels = [...new Set(heads.map((h) => h.level))].sort((a, b) => a - b);
+      measure();
+    }
+
+    // ---- 标题的文档坐标：只在 init / resize / 字体加载完时量，绝不每帧量 ----
+    function measure() {
+      for (const h of heads) h.top = h.el.getBoundingClientRect().top + scrollY;
+    }
+
+    // ---- 边长：固定两端 + 按层级数线性重算中间档 ----
+    function tickLen(level: number | null, max: number) {
+      if (level === null) return RG_MIN;
+      const rank = levels.indexOf(level);             // 0 = 最大的层级
+      return RG_MIN + (max - RG_MIN) * ((levels.length - rank) / levels.length);
+    }
+    function ballSize(level: number) {
+      const rank = levels.indexOf(level);
+      return BALL_MIN + (BALL_MAX - BALL_MIN) * ((levels.length - rank) / levels.length);
+    }
+
+    let gap = GAP_MAX;
+    let curY = 0;
+    let lastBall = -1;
+
+    function layout() {
+      if (!ticks.length) return;
+      // 最长边随视口收一收，窄屏上别撞到纸面
+      const max = Math.round(Math.min(RG_MAX, Math.max(34, innerWidth * 0.046)));
+      ruler.style.width = max + 'px';
+
+      // 间距自适应：刻度多就压密，少就拉开到上限。**边长永远是固定的**，
+      // 只有间距跟着文章长度变。
+      const avail = Math.round(innerHeight * 0.46);
+      gap = Math.max(GAP_MIN, Math.min(GAP_MAX, Math.floor(avail / ticks.length)));
+      ruler.style.height = ticks.length * gap + 'px';
+
+      const frag = document.createDocumentFragment();
+      ticks.forEach((lv, i) => {
+        const el = document.createElement('i');
+        el.className = lv === null ? 'readguide__tick' : 'readguide__tick is-head';
+        el.style.top = i * gap + 'px';
+        el.style.width = tickLen(lv, max).toFixed(2) + 'px';
+        frag.appendChild(el);
+      });
+      ticksEl.replaceChildren(frag);   // 只换刻度表，球在另一个容器里，不受影响
+      curY = active().idx * gap;
+    }
+
+    // ---- 当前该落在哪个标题上 ----
+    function active(): Head {
+      const ry = scrollY + vh / 2;   // 阅读横线的文档坐标
+      let a = heads[0];
+      for (const h of heads) {
+        if (h.top <= ry + 1) a = h;
+        else break;
+      }
+      // 「如果有更大层级优先落在更大层级」：更大的层级（level 更小）刚好压在
+      // 横线上时，哪怕它比当前候选低，也改落它。
+      for (const h of heads) {
+        if (h.level < a.level && Math.abs(h.top - ry) < PREFER) return h;
+      }
+      return a;
+    }
+
+    let last = performance.now();
+    let vh = innerHeight;   // 缓存：resize 时才变，避免每帧多读一次
+    function update() {
+      if (!heads.length) return;
+      const now = performance.now();
+      const dt = Math.min(64, now - last);
+      last = now;
+
+      const a = active();
+      const target = a.idx * gap;
+
+      // 帧率无关的指数逼近（__fx 回调不传 dt，自己算）。
+      // 0.12 → 时间常数约 160ms：够流畅，又不会让球慢到跟不上眼睛。
+      const k = reduced ? 1 : 1 - Math.pow(1 - 0.12, dt / 16.67);
+      curY += (target - curY) * k;
+
+      // 尺寸只在这一刻的层级真的变了时才写：改 width 会触发重排 + 重画光晕
+      if (a.level !== lastBall) {
+        lastBall = a.level;
+        ball.style.setProperty('--rg-ball', ballSize(a.level).toFixed(1) + 'px');
+      }
+      ball.style.setProperty('--rg-y', curY.toFixed(2) + 'px');
+    }
+
+    scan();
+    layout();
+    (window as any).__fx = (window as any).__fx || [];
+    (window as any).__fx.push(update);
+
+    // resize 会重排 → 刻度表的行数、间距、标题坐标全部要重量
+    let rt = 0;
+    addEventListener('resize', () => {
+      clearTimeout(rt);
+      rt = window.setTimeout(() => {
+        vh = innerHeight;
+        scan();
+        layout();
+        lastBall = -1;
+      }, 140);
+    });
+    // 字体落地后行高会变，行数跟着变
+    document.fonts?.ready.then(() => { scan(); layout(); lastBall = -1; });
+  }
+</script>

@@ -728,6 +728,99 @@ footer.site {
 }
 .backlink { color: var(--ink-3); font-size: 0.9rem; }
 
+/* ============================================================
+   阅读导引（只在文章详情页）
+   ------------------------------------------------------------
+   左侧标尺 = 文章的一张缩略地图：
+     · 一条刻度 = 正文的一行
+     · 标题的刻度按层级给不同长度，越大的层级越长
+     · **最长边 / 最短边是固定值**（--rg-max / --rg-min），不随文章长短变
+     · 中间层级在两者之间**线性重算**，分母是本页实际存在的层级总数，
+       所以只有 h1+h2 的文章和有 h1+h2+h3 的文章，中间那档长度不一样
+   中间横线 = 视线落点（视口正中），贯穿全宽。
+   光球 = 当前落在横线上的那个标题，球径同样随层级递减。
+
+   ⚠ 全部走 position/transform，不碰每帧的 getBoundingClientRect：
+     标题的文档坐标在 init / resize / 字体加载完时量一次就存住，
+     每帧只读 scrollY（不触发布局重算）。
+   ⚠ 刻度是静态的，只有光球逐帧改 transform —— 它自己 will-change，
+     不要给 .readguide 整层 will-change：满屏固定层 + 一堆子元素
+     会变成一张大瓦片，每帧重画。
+   ============================================================ */
+.readguide {
+  position: fixed;
+  inset: 0;
+  z-index: 3;              /* 在纸面上、顶栏/dock/ECG 之下 */
+  pointer-events: none;
+  --rg-min: 9px;           /* 最短边（正文行），固定 */
+  --rg-x: clamp(1.1rem, 3.2vw, 3.4rem);
+  --rg-gap: 26px;          /* 刻度间距，由 JS 按实际行数覆写 */
+}
+
+/* 中间横线：贯穿全宽，两端各留一段实红（呼应参考图两端的色块） */
+.readguide__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--ink-red) 34%, transparent) 0 var(--rg-x),
+    color-mix(in srgb, var(--ink-red) 16%, transparent) var(--rg-x) calc(100% - 4rem),
+    var(--ink-red) calc(100% - 4rem)
+  );
+}
+
+/* 标尺本体：高度 = 刻度数 × 间距，由 JS 写 */
+.readguide__ruler {
+  position: absolute;
+  left: var(--rg-x);
+  top: 50%;
+  width: 64px;             /* 由 JS 覆写成算出来的 --rg-max 像素值 */
+  height: 200px;
+  transform: translateY(-50%);
+}
+.readguide__ticks {
+  position: absolute;
+  inset: 0;
+}
+.readguide__tick {
+  position: absolute;
+  left: 0;
+  display: block;
+  height: 1px;
+  background: var(--fg-3);
+  opacity: 0.55;
+}
+.readguide__tick.is-head {
+  background: var(--fg-2);
+  opacity: 1;
+}
+
+/* 光球：落在当前标题那条刻度的左端。
+   它是 .readguide__ruler 的子节点 —— 定位靠标尺，不是靠满屏的 .readguide。 */
+.readguide__ball {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--rg-ball, 10px);
+  height: var(--rg-ball, 10px);
+  border-radius: 50%;
+  background: var(--ink-red);
+  transform: translate3d(0, var(--rg-y, 0px), 0) translate(-50%, -50%);
+  will-change: transform;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ink-red) 45%, transparent),
+    0 0 16px 2px color-mix(in srgb, var(--ink-red) 55%, transparent),
+    0 0 44px 8px color-mix(in srgb, var(--ink-red) 20%, transparent);
+}
+
+/* 标尺要占左边那块空白：视口不够宽时（<860px 纸面几乎贴边）直接隐藏 */
+@media (max-width: 860px) {
+  .readguide { display: none; }
+}
+
 /* ---------- About 时间线 ---------- */
 .timeline { position: relative; padding-left: 2rem; }
 .timeline svg.tl {
