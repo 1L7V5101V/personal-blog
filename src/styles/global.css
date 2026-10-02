@@ -8,6 +8,7 @@
   --accent: #ff2d55;      /* ECG 心电红（唯一信号色） */
   --yellow: #f5e003;      /* 海报黄 */
   --orange: #ff4d00;      /* 海报橙 */
+  --card-r: clamp(18px, 2.2vw, 30px); /* Apple 式大圆角 */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --measure: 42rem;
 }
@@ -166,6 +167,11 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 
 /* hero：白卡 + 阶梯缩进 + 黄圆（与其他卡同尺寸同中心） */
 .heroeslot { width: min(75vw, 76rem); }
+.hero-card, .hcard .imgbox, .poster, .listpanel-card {
+  border-radius: var(--card-r);
+  corner-shape: superellipse(2);
+  box-shadow: 0 18px 50px rgba(20, 20, 20, 0.07), 0 2px 8px rgba(20, 20, 20, 0.05);
+}
 .hero-card {
   position: relative;
   display: flex;
@@ -232,10 +238,10 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: var(--card);
-  clip-path: inset(0 100% 0 0);
+  clip-path: inset(0 100% 0 0 round var(--card-r));
   transition: clip-path 1.1s var(--ease-out);
 }
-.hcard.in .imgbox { clip-path: inset(0 0 0 0); }
+.hcard.in .imgbox { clip-path: inset(0 0 0 0 round var(--card-r)); }
 .hcard img {
   width: 100%;
   height: 100%;
@@ -352,34 +358,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 }
 .endpanel button:hover { color: #000; border-color: #000; }
 
-/* 终章扇子文案 */
-#fancap {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 1.1rem;
-  padding-bottom: 9vh;
-  z-index: 40;
-  pointer-events: none;
-  opacity: 0;
-}
-#fancap .fc-big {
-  font-size: clamp(2.6rem, 6vw, 5rem);
-  font-weight: 650;
-  letter-spacing: -0.035em;
-  color: var(--fg);
-  line-height: 1;
-}
-#fancap .fc-sub {
-  background: var(--card);
-  border-radius: 999px;
-  padding: 0.45rem 1.1rem;
-  font-size: 0.85rem;
-  color: var(--fg-2);
-}
 
 /* ---------- 文章列表 ---------- */
 .list { display: flex; flex-direction: column; }
