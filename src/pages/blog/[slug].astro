@@ -1,6 +1,8 @@
 ---
 import Base from '../../layouts/Base.astro';
 import { getCollection, render } from 'astro:content';
+// KaTeX 按页引入：只有文章页需要公式，不往首页/列表页发
+import 'katex/dist/katex.min.css';
 
 export async function getStaticPaths() {
   const posts = await getCollection('blog');
@@ -27,13 +29,11 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
 <!-- 阅读导引：左侧标尺（一行一条刻度）+ 视口正中的阅读横线 + 光球。
        纯装饰，整层 pointer-events:none，不挡任何点击。 -->
   <div class="readguide" aria-hidden="true">
-    <div class="readguide__ruler">
-      <!-- 光球在标尺**里面**（它要跟着标尺定位）；刻度单独一个内层容器，
-           因为 layout() 会 replaceChildren 重写刻度表，不能把球一起冲掉。 -->
-      <div class="readguide__ticks"></div>
-      <span class="readguide__ball"></span>
-    </div>
+    <div class="readguide__ruler"></div>
     <div class="readguide__line"></div>
+    <!-- 光球在**正文里**，不在标尺上：它落在当前标题的左侧边距里，
+         跟着那个标题的高度走。left 由 JS 按纸面位置算，top 靠 --rg-y。 -->
+    <span class="readguide__ball"></span>
   </div>
 </Base>
 
@@ -42,40 +42,46 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
   // 左侧标尺把整篇文章压成一张地图：正文一行一条刻度，标题按层级给更长的刻度。
   // 最长边 / 最短边固定（RG_MAX / RG_MIN），中间的层级按「本页实际存在的层级数」
   // 线性重算 —— 只有 h1+h2 的文章和有 h1+h2+h3 的文章，中间那档长度不一样。
+  //
+  // 光球**不在标尺上**，它落在正文里、当前标题的左侧边距（标题文字的左边），
+  // 竖长的椭圆，随标题层级递减。
   const prose = document.querySelector<HTMLElement>('.prose');
   const guide = document.querySelector<HTMLElement>('.readguide');
 
   if (prose && guide) {
+    const paper = prose;                                   // .prose 自己就是那张纸
     const ruler = guide.querySelector<HTMLElement>('.readguide__ruler')!;
-    const ticksEl = guide.querySelector<HTMLElement>('.readguide__ticks')!;
     const ball = guide.querySelector<HTMLElement>('.readguide__ball')!;
 
-    const RG_MAX = 64;        // 最长边（最大的标题），固定
-    const RG_MIN = 9;         // 最短边（正文行），固定
-    const BALL_MAX = 11;      // 光球最大直径
-    const BALL_MIN = 4.5;
-    const GAP_MAX = 26;       // 刻度间距上限（间距是自适应的，边长不是）
-    const GAP_MIN = 4;        // 再密就并成灰糊，钳在这
+    const RG_MAX = 64;        // 刻度最长边（最大的标题），固定
+    const RG_MIN = 9;         // 刻度最短边（正文行），固定
+    const GAP_MAX = 26;       // 刻度间距上限（间距自适应，边长不自适应）
+    const GAP_MIN = 0.6;      // 再密就并成灰糊，钳在这
+    const AVAIL = 0.62;       // 标尺最多占视口高度的百分比（剩下是标题/正文）
     const PREFER = 28;        // 「更大层级优先」的判定距离
+    const BALL_W_MAX = 13, BALL_W_MIN = 7;    // 光球宽：最大层级 / 最小层级
+    const BALL_H_MAX = 58, BALL_H_MIN = 26;   // 光球高
 
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    type Head = { level: number; idx: number; el: HTMLElement; top: number };
+    type Head = { level: number; idx: number; el: HTMLElement; top: number; h: number };
     const ticks: (number | null)[] = [];   // null = 正文行
     const heads: Head[] = [];
     let levels: number[] = [];             // 本页实际存在的层级，升序
     let lineH = 27;
+    let gap = GAP_MAX;
+    let maxLen = RG_MAX;
 
     // ---- 建刻度表：标题一条，正文按视觉行数一条一条 ----
     function scan() {
       ticks.length = 0;
       heads.length = 0;
-      lineH = parseFloat(getComputedStyle(prose!).lineHeight) || 27;
+      lineH = parseFloat(getComputedStyle(paper).lineHeight) || 27;
 
-      for (const el of Array.from(prose!.children) as HTMLElement[]) {
+      for (const el of Array.from(paper.children) as HTMLElement[]) {
         if (/^H[1-6]$/.test(el.tagName)) {
           const level = Number(el.tagName[1]);
-          heads.push({ level, idx: ticks.length, el, top: 0 });
+          heads.push({ level, idx: ticks.length, el, top: 0, h: 0 });
           ticks.push(level);
         } else {
           const n = el.tagName === 'PRE'
@@ -88,48 +94,30 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       measure();
     }
 
-    // ---- 标题的文档坐标：只在 init / resize / 字体加载完时量，绝不每帧量 ----
+    // ---- 标题的文档坐标 / 高度：只在 init / resize / 字体加载完时量，绝不每帧量 ----
     function measure() {
-      for (const h of heads) h.top = h.el.getBoundingClientRect().top + scrollY;
+      for (const h of heads) {
+        const r = h.el.getBoundingClientRect();
+        h.top = r.top + scrollY;
+        h.h = r.height;
+      }
     }
 
     // ---- 边长：固定两端 + 按层级数线性重算中间档 ----
-    function tickLen(level: number | null, max: number) {
+    function tickLen(level: number | null) {
       if (level === null) return RG_MIN;
-      const rank = levels.indexOf(level);             // 0 = 最大的层级
-      return RG_MIN + (max - RG_MIN) * ((levels.length - rank) / levels.length);
+      const rank = levels.indexOf(level);              // 0 = 最大的层级
+      return RG_MIN + (maxLen - RG_MIN) * ((levels.length - rank) / levels.length);
     }
+
+    // ---- 光球尺寸：跟着刻度长度走，但开方让层级差拉得开（h1/h2/h3 一眼能分）----
     function ballSize(level: number) {
-      const rank = levels.indexOf(level);
-      return BALL_MIN + (BALL_MAX - BALL_MIN) * ((levels.length - rank) / levels.length);
-    }
-
-    let gap = GAP_MAX;
-    let curY = 0;
-    let lastBall = -1;
-
-    function layout() {
-      if (!ticks.length) return;
-      // 最长边随视口收一收，窄屏上别撞到纸面
-      const max = Math.round(Math.min(RG_MAX, Math.max(34, innerWidth * 0.046)));
-      ruler.style.width = max + 'px';
-
-      // 间距自适应：刻度多就压密，少就拉开到上限。**边长永远是固定的**，
-      // 只有间距跟着文章长度变。
-      const avail = Math.round(innerHeight * 0.46);
-      gap = Math.max(GAP_MIN, Math.min(GAP_MAX, Math.floor(avail / ticks.length)));
-      ruler.style.height = ticks.length * gap + 'px';
-
-      const frag = document.createDocumentFragment();
-      ticks.forEach((lv, i) => {
-        const el = document.createElement('i');
-        el.className = lv === null ? 'readguide__tick' : 'readguide__tick is-head';
-        el.style.top = i * gap + 'px';
-        el.style.width = tickLen(lv, max).toFixed(2) + 'px';
-        frag.appendChild(el);
-      });
-      ticksEl.replaceChildren(frag);   // 只换刻度表，球在另一个容器里，不受影响
-      curY = active().idx * gap;
+      const ratio = (tickLen(level) - RG_MIN) / (maxLen - RG_MIN);
+      const f = ratio * ratio;
+      return {
+        w: BALL_W_MIN + (BALL_W_MAX - BALL_W_MIN) * f,
+        h: BALL_H_MIN + (BALL_H_MAX - BALL_H_MIN) * f,
+      };
     }
 
     // ---- 当前该落在哪个标题上 ----
@@ -148,8 +136,43 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       return a;
     }
 
+    function layout() {
+      if (!ticks.length) return;
+      // 最长边随视口收一收，窄屏上别撞到纸面
+      maxLen = Math.round(Math.min(RG_MAX, Math.max(34, innerWidth * 0.046)));
+      ruler.style.width = maxLen + 'px';
+
+      // 间距自适应：刻度多就压密，少就拉开到上限。**边长永远是固定的**，
+      // 只有间距跟着文章长度变。
+      //
+      // ⚠ 下限只钳到 0.6px，不是「看起来舒服」的 4px。间距一旦被下限撑住，
+      // 标尺总高就会超出视口（451 条 × 4px = 1804px），而光球要落在标尺上 ——
+      // 球会直接飞出屏幕。所以宁可让长文缩成一条密排的「条形码」，也要保证
+      // 整个标尺收在视口内。标题刻度靠**长度**（64 / 46 / 27px）在密排里认得出来。
+      const avail = Math.round(innerHeight * AVAIL);
+      gap = Math.max(GAP_MIN, Math.min(GAP_MAX, avail / ticks.length));
+      ruler.style.height = ticks.length * gap + 'px';
+
+      const frag = document.createDocumentFragment();
+      ticks.forEach((lv, i) => {
+        const el = document.createElement('i');
+        el.className = lv === null ? 'readguide__tick' : 'readguide__tick is-head';
+        el.style.top = i * gap + 'px';
+        el.style.width = tickLen(lv).toFixed(2) + 'px';
+        frag.appendChild(el);
+      });
+      ruler.replaceChildren(frag);
+
+      // 光球的横向位置：纸面左内边距里，标题文字的左边
+      const padX = parseFloat(getComputedStyle(paper).paddingLeft) || 32;
+      ball.style.left = (paper.getBoundingClientRect().left + padX * 0.3).toFixed(1) + 'px';
+    }
+
+    let curY = NaN;        // NaN = 首帧直接吸附，之后才做补间
+    let lastBall = -1;
+    let vh = innerHeight;  // 缓存：resize 时才变，避免每帧多读一次
     let last = performance.now();
-    let vh = innerHeight;   // 缓存：resize 时才变，避免每帧多读一次
+
     function update() {
       if (!heads.length) return;
       const now = performance.now();
@@ -157,17 +180,21 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       last = now;
 
       const a = active();
-      const target = a.idx * gap;
+      // 目标 = 该标题在视口里的垂直中心。标题随滚动连续上移，换标题时跳一下，
+      // 下面的逼近把这个跳变抹平 —— 读起来就是「从上一节滑到下一节」。
+      const target = a.top - scrollY + a.h / 2;
 
       // 帧率无关的指数逼近（__fx 回调不传 dt，自己算）。
-      // 0.12 → 时间常数约 160ms：够流畅，又不会让球慢到跟不上眼睛。
-      const k = reduced ? 1 : 1 - Math.pow(1 - 0.12, dt / 16.67);
-      curY += (target - curY) * k;
+      // 0.12 → 时间常数约 160ms：够流畅，又不会慢到跟不上眼睛。
+      const k = reduced || !Number.isFinite(curY) ? 1 : 1 - Math.pow(1 - 0.12, dt / 16.67);
+      curY = Number.isFinite(curY) ? curY + (target - curY) * k : target;
 
-      // 尺寸只在这一刻的层级真的变了时才写：改 width 会触发重排 + 重画光晕
+      // 尺寸只在这一刻的层级真的变了时才写：改 width/height 会触发重排 + 重画光晕
       if (a.level !== lastBall) {
         lastBall = a.level;
-        ball.style.setProperty('--rg-ball', ballSize(a.level).toFixed(1) + 'px');
+        const s = ballSize(a.level);
+        ball.style.setProperty('--rg-ball-w', s.w.toFixed(1) + 'px');
+        ball.style.setProperty('--rg-ball-h', s.h.toFixed(1) + 'px');
       }
       ball.style.setProperty('--rg-y', curY.toFixed(2) + 'px');
     }
@@ -177,7 +204,7 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
     (window as any).__fx = (window as any).__fx || [];
     (window as any).__fx.push(update);
 
-    // resize 会重排 → 刻度表的行数、间距、标题坐标全部要重量
+    // resize 会重排 → 刻度表的行数、间距、标题坐标、光球的横向位置全部要重量
     let rt = 0;
     addEventListener('resize', () => {
       clearTimeout(rt);
@@ -186,6 +213,7 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
         scan();
         layout();
         lastBall = -1;
+        curY = NaN;
       }, 140);
     });
     // 字体落地后行高会变，行数跟着变

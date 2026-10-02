@@ -720,6 +720,40 @@ footer.site {
   line-height: 1.7;
 }
 .prose pre code { background: none; border: none; padding: 0; }
+/* 表格：笔记/技术类文章大量用表。纸面上只用发丝线分栏，不加底色。 */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.6em 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.prose th,
+.prose td {
+  padding: 0.5em 0.6em;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--paper-line);
+}
+/* 符号列（第二列）内容都很短，锁死不换行，把宽度让给术语列 ——
+   否则「本征载流子浓度」这种词会在两行中间断开。 */
+.prose th:nth-child(2),
+.prose td:nth-child(2) { white-space: nowrap; }
+.prose thead th {
+  color: var(--ink);
+  font-weight: 650;
+  border-bottom: 1.5px solid var(--ink);
+  white-space: nowrap;
+}
+.prose hr {
+  height: 0;
+  margin: 2.6em 0;
+  border: 0;
+  border-top: 1px solid var(--paper-line);
+}
+/* KaTeX 不该继承正文颜色里的暖棕重排：公式自己用近黑，和标题同一族 */
+.prose .katex { color: var(--ink); }
+.prose .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.2em 0; }
 .prose blockquote {
   margin: 1.5em 0;
   padding-left: 1.2em;
@@ -757,13 +791,15 @@ footer.site {
   --rg-gap: 26px;          /* 刻度间距，由 JS 按实际行数覆写 */
 }
 
-/* 中间横线：贯穿全宽，两端各留一段实红（呼应参考图两端的色块） */
+/* 中间横线：贯穿全宽，两端各留一段实红（呼应参考图两端的色块）。
+   3px：1px 在深色背景上几乎读不出来，3px 才有「视线落点」的重量感。 */
 .readguide__line {
   position: absolute;
   left: 0;
   right: 0;
   top: 50%;
-  height: 1px;
+  height: 3px;
+  margin-top: -1px;   /* 居中：别让 3px 整体偏在横线下方 */
   background: linear-gradient(
     to right,
     color-mix(in srgb, var(--ink-red) 34%, transparent) 0 var(--rg-x),
@@ -781,10 +817,6 @@ footer.site {
   height: 200px;
   transform: translateY(-50%);
 }
-.readguide__ticks {
-  position: absolute;
-  inset: 0;
-}
 .readguide__tick {
   position: absolute;
   left: 0;
@@ -798,22 +830,25 @@ footer.site {
   opacity: 1;
 }
 
-/* 光球：落在当前标题那条刻度的左端。
-   它是 .readguide__ruler 的子节点 —— 定位靠标尺，不是靠满屏的 .readguide。 */
+/* 光球：正文里，落在当前标题的**左侧边距**（标题文字的左边），不在标尺上。
+   形状是竖长的椭圆（不是正圆）—— 参考图里就是一颗竖瞳。
+   宽高都随标题层级递减，靠 --rg-ball-w / --rg-ball-h 写。
+   定位：left 由 JS 按纸面位置算好写进来（固定定位，相对视口）；
+   top 用 transform 的 --rg-y 推，逐帧只改 transform，不触发布局。 */
 .readguide__ball {
-  position: absolute;
+  position: fixed;
   left: 0;
   top: 0;
-  width: var(--rg-ball, 10px);
-  height: var(--rg-ball, 10px);
+  width: var(--rg-ball-w, 13px);
+  height: var(--rg-ball-h, 58px);
   border-radius: 50%;
   background: var(--ink-red);
   transform: translate3d(0, var(--rg-y, 0px), 0) translate(-50%, -50%);
   will-change: transform;
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--ink-red) 45%, transparent),
-    0 0 16px 2px color-mix(in srgb, var(--ink-red) 55%, transparent),
-    0 0 44px 8px color-mix(in srgb, var(--ink-red) 20%, transparent);
+    0 0 22px 3px color-mix(in srgb, var(--ink-red) 50%, transparent),
+    0 0 60px 14px color-mix(in srgb, var(--ink-red) 22%, transparent);
 }
 
 /* 标尺要占左边那块空白：视口不够宽时（<860px 纸面几乎贴边）直接隐藏 */
