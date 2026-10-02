@@ -160,15 +160,14 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       [0.35, 1.0],
     ];
 
-    // 开场扇子（S=0 全开，滚动放平）+ 滚轴变形
+    // 开场牌堆（S=0 居中一张、底下随机角度+微偏移堆叠，滚动平移展开）+ 滚轴变形
     const fanEls = [...track.querySelectorAll(':scope > .slot')];
     const N = fanEls.length;
-    const PIVOT_X = 30, PIVOT_Y = 40; // 扇轴：视口左下角（留边）
     let prevStrack = 0, vSmooth = 0;
-    let slotY = 0, slotH = 0;
+    let slotY = 0, slotH = 0, slotW = 0;
     const measureFan = () => {
       const r0 = fanEls[0]?.getBoundingClientRect();
-      if (r0) { slotY = r0.top; slotH = r0.height; }
+      if (r0) { slotY = r0.top; slotH = r0.height; slotW = r0.width; }
     };
     measureFan();
     addEventListener('resize', () => { if (scrollY < 2) measureFan(); });
@@ -176,6 +175,12 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       const x = Math.max(0, Math.min(1, t));
       return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
     };
+    // 牌堆位形：随机角度/偏移（每次加载洗一次牌）；hero 在最上
+    const pilePose = fanEls.map(() => ({
+      r: Math.random() * 14 - 7,     // -7° ~ 7°
+      x: Math.random() * 64 - 32,    // ±32px
+      y: Math.random() * 40 - 20,    // ±20px
+    }));
 
     (window as any).__fx = (window as any).__fx || [];
     (window as any).__fx.push(() => {
@@ -200,10 +205,10 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       vSmooth += (v - vSmooth) * 0.12;
       const skew = Math.max(-7, Math.min(7, vSmooth * 0.05));
 
-      // 开场扇子：S=0 就是全开的塔罗扇，滚动 = 唯一动作「放平回轨道」，牌不缩放
+      // 开场牌堆：S=0 居中一张卡、底下随机角度+微偏移堆叠；滚动 = 平移展开回轨道，牌不缩放
       const flyRaw = Math.max(0, Math.min(1, S / UNFOLD_DIST));
       const flyPe = easeInOut(flyRaw);
-      const vh = innerHeight;
+      const cx = innerWidth / 2, cy = innerHeight / 2;
 
       fanEls.forEach((el, i) => {
         if (flyRaw >= 0.999) {
@@ -214,17 +219,15 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           if (tg) tg.style.opacity = '';
           return;
         }
-        // 扇位（放平前）：牌角从 -90°（hero 竖立）到 -25°，轴心沿底边依次右移
-        const fanAngle = -90 + (65 * i) / (N - 1);
-        const fanX = PIVOT_X + ((innerWidth - PIVOT_X * 2 - 180) * i) / (N - 1);
+        const pp = pilePose[i];
         const naturalX = el.offsetLeft - STrack;
-        const tx = (fanX - naturalX) * (1 - flyPe);
-        const ty = (vh - PIVOT_Y - slotH - slotY) * (1 - flyPe);
-        el.style.transformOrigin = '0% 100%';
-        el.style.zIndex = String(20 + i);
+        const tx = (cx - slotW / 2 + pp.x - naturalX) * (1 - flyPe);
+        const ty = (cy - slotH / 2 + pp.y - slotY) * (1 - flyPe);
+        el.style.transformOrigin = '50% 50%';
+        el.style.zIndex = String(20 + (N - i)); // hero 最上
         el.style.transform =
-          `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) rotate(${(fanAngle * (1 - flyPe)).toFixed(2)}deg) skewX(${skew.toFixed(2)}deg)`;
-        // 小标签跟着牌一起落定：放平后才显形
+          `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) rotate(${(pp.r * (1 - flyPe)).toFixed(2)}deg) skewX(${skew.toFixed(2)}deg)`;
+        // 小标签跟着牌落定：铺平后才显形
         const tg = el.querySelector<HTMLElement>('.tag');
         if (tg) tg.style.opacity = String(Math.max(0, (flyPe - 0.6) / 0.4));
       });
