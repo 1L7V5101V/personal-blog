@@ -50,7 +50,7 @@ let config = {
     COLORFUL: true,
     COLOR_UPDATE_SPEED: 4,
     PAUSED: false,
-    BACK_COLOR: { r: 232, g: 232, b: 229 },
+    BACK_COLOR: { r: 11, g: 11, b: 12 },  // = --bg 黑场
     TRANSPARENT: false,
     BLOOM: false,
     BLOOM_ITERATIONS: 8,

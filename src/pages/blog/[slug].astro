@@ -13,13 +13,15 @@ const d = post.data.date;
 const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 ---
 <Base title={`${post.data.title} · il7510n`} description={post.data.title} path={`/blog/${post.id}/`}>
-  <article class="article wrap prose">
-    <a class="backlink u" href="/blog/" data-backlink>← 全部文章</a>
-    <div class="meta">
-      <span>{fmt}</span>
-      <span>{post.data.tag}</span>
-    </div>
-    <h1>{post.data.title}</h1>
-    <Content />
-  </article>
+  <div class="wrap article">
+    <article class="prose paper">
+      <a class="backlink u" href="/blog/" data-backlink>← 全部文章</a>
+      <div class="meta">
+        <span>{fmt}</span>
+        <span>{post.data.tag}</span>
+      </div>
+      <h1>{post.data.title}</h1>
+      <Content />
+    </article>
+  </div>
 </Base>

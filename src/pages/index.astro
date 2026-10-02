@@ -15,6 +15,10 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
   <section class="journey" id="journey">
     <div class="stage">
       <!-- 粗管曲线层（Lusion 形态：大弧+环绕，滚动分段描绘） -->
+      <!-- 白光 + 红晕：参考图里横穿画面的那道亮光，和从画面下缘透出来的红光。
+           两层都是静态渐变，画一次就缓存，不进 rAF。 -->
+      <div class="lightbar" aria-hidden="true"></div>
+
       <svg class="hline" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true">
         <path
           pathLength="1"
@@ -40,7 +44,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         <!-- 1 · Hero：白卡 + 阶梯缩进 + 黄圆 -->
         <section class="slot heroeslot">
           <a class="hero-card" href="/blog/" data-pt="hero">
-            <span class="dot" style="width: 68%; right: -8%; top: 50%; transform: translateY(-50%);"></span>
+            <span class="dot" style="width: 42%; right: -13%; top: 50%; transform: translateY(-50%);"></span>
             <div class="hero-text">
               <span class="lname"><span class="mask"><span data-reveal style="--i:0">il7510n</span></span></span>
               <span class="line s1"><span class="mask"><span data-reveal style="--i:1">写代码，也写字。</span></span></span>
@@ -72,21 +76,21 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         <!-- 3 · 字体海报卡（巨型裁切文字 + 色块圆；过中心后爆发加速） -->
         <div class="slot pslot">
           <a class="poster" href="/blog/why-blog-again/" data-pt="poster:why-blog-again">
-            <span class="dot pdot" style="width: 46%; right: 7%; top: 9%;"></span>
+            <span class="dot pdot" style="width: 34%; right: 5%; top: 10%;"></span>
             <span class="pword">写</span>
             <span class="psub">收藏夹越来越厚，写出来的越来越少。</span>
           </a>
         </div>
         <div class="slot pslot">
           <a class="poster" href="/blog/deconstruct-lusion-scroll/" data-pt="poster:deconstruct-lusion-scroll">
-            <span class="dot dot-orange pdot" style="width: 46%; right: 7%; top: 9%;"></span>
+            <span class="dot dot-orange pdot" style="width: 34%; right: 5%; top: 10%;"></span>
             <span class="pword">拆</span>
             <span class="psub">幕帘、缩放、描线——全是基础功。</span>
           </a>
         </div>
         <div class="slot pslot">
           <a class="poster" href="/blog/lenis-smooth-scroll/" data-pt="poster:lenis-smooth-scroll">
-            <span class="dot pdot" style="width: 42%; right: 6%; top: 12%;"></span>
+            <span class="dot pdot" style="width: 30%; right: 5%; top: 12%;"></span>
             <span class="pword">100%</span>
             <span class="psub">动效全手写 · 零现成模板</span>
           </a>
