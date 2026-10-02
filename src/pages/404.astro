@@ -1,0 +1,28 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="404 · il7510n">
+  <section class="wrap lost">
+    <p class="code" data-reveal style="--i:0">404</p>
+    <h1 data-reveal style="--i:1">这一页还没写。</h1>
+    <p class="tip" data-reveal style="--i:2">
+      心电都平了——<a class="u" href="/">回首页</a> 复苏一下，或去 <a class="u" href="/blog/">/blog</a> 看看写了的。
+    </p>
+  </section>
+</Base>
+
+<style>
+  .lost { padding-top: 24vh; padding-bottom: 10rem; }
+  .code {
+    margin: 0;
+    font-size: clamp(4rem, 12vw, 9rem);
+    font-weight: 650;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--accent);
+  }
+  h1 { margin: 0.6rem 0 1.2rem; font-size: clamp(1.6rem, 3.5vw, 2.4rem); }
+  .tip { color: var(--fg-2); }
+  .tip a { border-bottom: 1px solid var(--fg-3); transition: color 0.3s, border-color 0.3s; }
+  .tip a:hover { color: #000; border-color: #000; }
+</style>

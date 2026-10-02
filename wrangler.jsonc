@@ -1,0 +1,9 @@
+{
+  // Cloudflare Workers（静态资产模式）——部署命令 npx wrangler deploy 依赖此文件
+  "name": "personal-blog",
+  "compatibility_date": "2026-10-02",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}
