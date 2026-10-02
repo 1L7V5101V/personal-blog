@@ -3,6 +3,7 @@ title: 把 Lusion 的滑动效果拆开看
 date: 2026-10-01
 tag: 前端
 cover: /img/p2.jpg
+depth: /img/p2-depth.webp
 ---
 
 Lusion 的网站看起来玄，拆开全是基础功。

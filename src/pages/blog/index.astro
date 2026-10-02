@@ -15,7 +15,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
   <section class="wrap">
     <div class="list">
       {posts.map((p, i) => (
-        <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.id}/`}>
+        <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>
           <span class="t">{p.data.title}</span>
           <span class="m">{p.data.tag} · {fmt(p.data.date)}</span>
         </a>

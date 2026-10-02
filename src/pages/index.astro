@@ -9,6 +9,8 @@ const featured = posts.slice(0, 2);
 const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 ---
 <Base>
+  <!-- 首页自带入场秀：刷新时不要让浏览器恢复滚动位置（否则会错过开场，或被中途的位置卡住） -->
+  <script is:inline>history.scrollRestoration = 'manual';</script>
   <!-- 整页横向 journey：垂直滚动驱动整条轨道（瑞士海报风） -->
   <section class="journey" id="journey">
     <div class="stage">
@@ -37,7 +39,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       <div class="track">
         <!-- 1 · Hero：白卡 + 阶梯缩进 + 黄圆 -->
         <section class="slot heroeslot">
-          <a class="hero-card" href="/blog/">
+          <a class="hero-card" href="/blog/" data-pt="hero">
             <span class="dot" style="width: 68%; right: -8%; top: 50%; transform: translateY(-50%);"></span>
             <div class="hero-text">
               <span class="lname"><span class="mask"><span data-reveal style="--i:0">il7510n</span></span></span>
@@ -52,16 +54,16 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         <!-- 2 · 图片卡（悬停虚化） -->
         {featured.map((p, i) => (
           <div class="slot">
-            <a class="hcard" href={`/blog/${p.id}/`}>
+            <a class="hcard" href={`/blog/${p.id}/`} aria-label={p.data.title} data-pt={`card:${p.id}`}>
               <figure>
                 <div class="imgbox">
                   {p.data.cover && <img src={p.data.cover} alt="" loading="lazy" />}
+                  {/* 视差画布：鼠标在图上移动时按深度图逐像素偏移取样（真视差，不是整张卡刚性倾斜）。
+                      没有 depth 的封面就不渲染，退回纯 <img>。 */}
+                  {p.data.depth && (
+                    <canvas class="fdpt" data-depth={p.data.depth} aria-hidden="true"></canvas>
+                  )}
                 </div>
-                <figcaption>
-                  <span class="t">{p.data.title}</span>
-                  <span class="d">{fmt(p.data.date)}</span>
-                  <span class="go">→</span>
-                </figcaption>
               </figure>
             </a>
           </div>
@@ -69,21 +71,21 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
 
         <!-- 3 · 字体海报卡（巨型裁切文字 + 色块圆；过中心后爆发加速） -->
         <div class="slot pslot">
-          <a class="poster" href="/blog/why-blog-again/">
+          <a class="poster" href="/blog/why-blog-again/" data-pt="poster:why-blog-again">
             <span class="dot pdot" style="width: 46%; right: 7%; top: 9%;"></span>
             <span class="pword">写</span>
             <span class="psub">收藏夹越来越厚，写出来的越来越少。</span>
           </a>
         </div>
         <div class="slot pslot">
-          <a class="poster" href="/blog/deconstruct-lusion-scroll/">
+          <a class="poster" href="/blog/deconstruct-lusion-scroll/" data-pt="poster:deconstruct-lusion-scroll">
             <span class="dot dot-orange pdot" style="width: 46%; right: 7%; top: 9%;"></span>
             <span class="pword">拆</span>
             <span class="psub">幕帘、缩放、描线——全是基础功。</span>
           </a>
         </div>
         <div class="slot pslot">
-          <a class="poster" href="/blog/lenis-smooth-scroll/">
+          <a class="poster" href="/blog/lenis-smooth-scroll/" data-pt="poster:lenis-smooth-scroll">
             <span class="dot pdot" style="width: 42%; right: 6%; top: 12%;"></span>
             <span class="pword">100%</span>
             <span class="psub">动效全手写 · 零现成模板</span>
@@ -95,7 +97,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           <div class="listpanel-card">
             <div class="list">
               {posts.map((p, i) => (
-                <a class="row" href={`/blog/${p.id}/`}>
+                <a class="row" href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>
                   <span class="t">{p.data.title}</span>
                   <span class="m">{p.data.tag} · {fmt(p.data.date)}</span>
                 </a>
@@ -137,17 +139,186 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
     import('../scripts/fluid.js');
   }
 
+  // ── 图片卡悬停 ────────────────────────────────────────────────────────────────
+  // ① 散焦 → 一次性对焦：纯 CSS 动画，状态挂 .slot（不是 :hover —— 弯成 11 条时克隆片是
+  //    pointer-events:none 的副本，匹配不到 :hover，只有本体（中条）动 → 接缝穿帮）。
+  // ② 鼠标视差：深度图 + WebGL 逐像素位移。整张卡刚性倾斜（rotateY）整张图像素位移率一样，
+  //    读起来是「卡片在转」而不是「近处比远处动得多」；真视差必须逐像素按深度改取样坐标 → 只能进 GPU。
+  if (matchMedia('(hover: hover)').matches && !reduced) {
+    const VS = `#version 300 es
+in vec2 aPos;
+out vec2 vUv;
+void main(){ vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
+    const FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uColor, uDepth;
+uniform vec2 uMouse, uCrop;
+uniform float uAmt, uZoom;
+void main(){
+  vec2 uv = (vUv - 0.5) / uZoom + 0.5;        // 轻微放大：把位移后的取样窗口推出画面，边缘不留拉伸痕
+  vec2 t  = (uv - 0.5) * uCrop + 0.5;         // 与 object-fit: cover 完全一致的取样窗口
+  float d = texture(uDepth, t).r;             // 0 = 远，1 = 近
+  vec2 p  = t + uMouse * (d - 0.5) * uAmt;    // 近处反向动得多 = 视差
+  outColor = vec4(texture(uColor, clamp(p, 0.002, 0.998)).rgb, 1.0);
+}`;
+    type Para = {
+      slot: HTMLElement; cv: HTMLCanvasElement; img: HTMLImageElement;
+      gl: WebGL2RenderingContext | null; uni: Record<string, WebGLUniformLocation | null>;
+      crop: [number, number]; tx: number; ty: number; x: number; y: number;
+      dirty: boolean; failed: boolean; uploaded: boolean; tryGo?: () => void;
+    };
+    const cards: Para[] = [];
+
+    document.querySelectorAll<HTMLElement>('.slot').forEach((slot) => {
+      const card = slot.querySelector<HTMLElement>('.hcard');
+      const cv = slot.querySelector<HTMLCanvasElement>('.fdpt');
+      const img = slot.querySelector<HTMLImageElement>('.hcard img');
+      if (!card || !img) return;   // 只有图片卡（.hcard）有对焦效果
+
+      let focusTimer = 0;
+      const para: Para | null = cv ? {
+        slot, cv, img, gl: null, uni: {},
+        crop: [1, 1], tx: 0, ty: 0, x: 0, y: 0, dirty: false, failed: false, uploaded: false,
+      } : null;
+      if (para) cards.push(para);
+
+      // 惰性初始化：第一次指针进卡才建 GL 上下文、才去下载深度图（没人悬停就零开销）
+      const init = () => {
+        const p = para;
+        if (!p || p.gl || p.failed) return;
+        const gl = p.cv.getContext('webgl2', { alpha: false, antialias: false, premultipliedAlpha: false });
+        if (!gl) { p.failed = true; p.cv.style.display = 'none'; return; }
+        const sh = (type: number, src: string) => {
+          const s = gl.createShader(type)!;
+          gl.shaderSource(s, src); gl.compileShader(s);
+          if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { p.failed = true; p.cv.style.display = 'none'; }
+          return s;
+        };
+        const prog = gl.createProgram()!;
+        gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
+        gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+        gl.linkProgram(prog);
+        if (p.failed || !gl.getProgramParameter(prog, gl.LINK_STATUS)) { p.failed = true; p.cv.style.display = 'none'; return; }
+        gl.useProgram(prog);
+        const buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+        const loc = gl.getAttribLocation(prog, 'aPos');
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        for (const n of ['uColor', 'uDepth', 'uMouse', 'uCrop', 'uAmt', 'uZoom']) p.uni[n] = gl.getUniformLocation(prog, n);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);   // 让 vUv.y=1 对应图片顶部（和 <img> 同向）
+        gl.uniform1i(p.uni.uColor!, 0);
+        gl.uniform1i(p.uni.uDepth!, 1);
+        gl.uniform1f(p.uni.uAmt!, 0.026);   // 位移上限约 ±0.013 UV ≈ 卡宽 948px 时 ±12px
+        gl.uniform1f(p.uni.uZoom!, 1.04);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        p.gl = gl;
+
+        const upload = (unit: number, el: TexImageSource) => {
+          const tex = gl.createTexture();
+          gl.activeTexture(gl.TEXTURE0 + unit);
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, el);
+        };
+        const depth = new Image();
+        depth.src = p.cv.dataset.depth as string;
+        // 上传只看「两图都真到位了」，不依赖 onload 先后：
+        // 图是 loading=lazy 的，可能刚滑进视口才开始下载；depth 又常在 HTTP 缓存里 —— 
+        // 两种情况下 load 事件都可能在监听器挂上之前就打完了。所以 go() 幂等，
+        // init 里立即试一次，两个 load 事件再试，主循环里每帧再兵底试一次。
+        const go = () => {
+          if (p.failed || p.uploaded || p.gl !== gl) return;
+          if (!p.img.complete || !p.img.naturalWidth || !depth.complete || !depth.naturalWidth) return;
+          p.uploaded = true;
+          upload(0, p.img);
+          upload(1, depth);
+          const box = p.cv.getBoundingClientRect();
+          const src = p.img.naturalWidth / p.img.naturalHeight;   // 与 object-fit: cover 对齐
+          const box2 = box.width / box.height || 16 / 9;
+          p.crop = src > box2 ? [box2 / src, 1] : [1, src / box2];
+          gl.uniform2f(p.uni.uCrop!, p.crop[0], p.crop[1]);
+          p.cv.style.opacity = '1';   // 上传完成前画布是黑的，先别盖住 <img>
+          p.dirty = true;
+        };
+        p.tryGo = go;
+        depth.onload = go;
+        p.img.addEventListener('load', go);
+        go();
+      };
+
+      slot.addEventListener('pointerenter', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        slot.classList.add('is-hovering');
+        // 用定时器而不是 animationend 打 is-focused：动画若被弯牌中断，animationend 不会触发，
+        // 之后每次弯/不弯切换都会重播一次散焦 —— 滑动时就是一连串闪烁。
+        clearTimeout(focusTimer);
+        focusTimer = window.setTimeout(() => slot.classList.add('is-focused'), 1000);
+        init();
+      });
+      slot.addEventListener('pointerleave', () => {
+        clearTimeout(focusTimer);
+        slot.classList.remove('is-hovering', 'is-focused');
+        if (para) { para.tx = 0; para.ty = 0; para.dirty = true; }
+      });
+      slot.addEventListener('pointermove', (e) => {
+        if (e.pointerType !== 'mouse' || !para) return;
+        init();
+        const r = card.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
+        // 鼠标右 → 视点右移 → 近处内容看着左移 → 取样往右走（uMouse 为正），所以这里直接成正比
+        para.tx = clamp1(((e.clientX - r.left) / r.width) * 2 - 1);
+        para.ty = clamp1(1 - ((e.clientY - r.top) / r.height) * 2);   // 屏幕上方为 +1（UV 里 y 向上）
+        para.dirty = true;
+      });
+    });
+
+    if (cards.length) {
+      const fxq = ((window as any).__fx ||= []);
+      fxq.push(() => {
+        for (const p of cards) {
+          if (!p.gl) continue;
+          if (!p.uploaded) { p.tryGo?.(); if (!p.uploaded) continue; }
+          const k = 0.16, settled = Math.abs(p.tx - p.x) + Math.abs(p.ty - p.y) < 0.0012;
+          if (settled) { p.x = p.tx; p.y = p.ty; }
+          if (!p.dirty && settled) continue;   // 静止就一帧不画，GPU 归零
+          p.x += (p.tx - p.x) * k;
+          p.y += (p.ty - p.y) * k;
+          p.dirty = !settled;
+          if (p.slot.classList.contains('is-bent')) continue;   // 切片期间画布被 CSS 藏起来了，让 <img> 顶班
+          const cv = p.cv, gl = p.gl;
+          const dpr = Math.min(devicePixelRatio || 1, 2);
+          const w = Math.max(1, Math.round(cv.clientWidth * dpr)), h = Math.max(1, Math.round(cv.clientHeight * dpr));
+          if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; gl.viewport(0, 0, w, h); }
+          gl.uniform2f(p.uni.uMouse!, p.x, p.y);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+      });
+      // 画布尺寸变了（缩放窗口）但鼠标没在动时也得重画一次，否则会拉伸模糊
+      addEventListener('resize', () => { for (const p of cards) p.dirty = true; }, { passive: true });
+    }
+  }
+
   if (journey && track && !mobile.matches && !reduced) {
     const UNFOLD_DIST = 1800;   // 牌堆展开回轨道占用的滚动距离（此间轨道 Hold 不动）
     const INTRO_DIST = () => Math.max(560, innerHeight * 0.9); // 拉牌入场占用的滚动距离（滚动可正反擦洗）
+    const TRACK_SPEED = 1.7;    // 展开后横向滑动速度倍率（1 = 原来速度）：越大，滚同样的距离卡片滑得越远
     let dist = 0;
+    let panEnd = 0;   // 展开跑完时轨道要推进的距离：让第 2 张卡（index 1）的中心正好落在屏幕中心
     const measure = () => {
       dist = Math.max(0, track.scrollWidth - innerWidth);
-      journey.style.height = `calc(100svh + ${dist + UNFOLD_DIST + INTRO_DIST()}px)`;
+      // 横向段占的滚动距离 = (dist - 展开期已经推进掉的 panEnd) / TRACK_SPEED
+      // （展开期牌一边铺开、轨道一边同步推进 panEnd，所以后面要补的少了这一段）
+      journey.style.height = `calc(100svh + ${Math.max(0, dist - panEnd) / TRACK_SPEED + UNFOLD_DIST + INTRO_DIST()}px)`;
     };
-    measure();
-    addEventListener('resize', measure);
-    addEventListener('load', measure);
 
     // 三条曲线各自的描绘区间（占总滚动进度的比例）
     const phases = [
@@ -158,19 +329,51 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
 
     // 开场牌堆（拉牌入场落到屏幕中心：hero 正中最上、其余随机角度+微偏移堆叠）+ 滚轴变形
     const fanEls = [...track.querySelectorAll(':scope > .slot')];
+    const fanTags = fanEls.map((e) => e.querySelector<HTMLElement>('.tag'));
     const N = fanEls.length;
-    let prevStrack = 0, vSmooth = 0;
+    let prevConveyor = 0, vSmooth = 0, cylOn = false;
     let slotY = 0, slotH = 0, slotW = 0;
+    let slotLeft: number[] = [];   // 每张牌的布局位置：缓存起来，免得每帧读 offsetLeft 把样式计算/重排反复触发
+    let posterW: number[] = [], posterLeft: number[];   // 海报卡同理（字内滑动要用，但布局量不必每帧读）
+    const lastPan: number[] = [];                       // --pan 上次写入的值（量化去重，避免每帧无谓重绘）
     const measureFan = () => {
       // 先清掉 fx 设的 transform 再量，否则会量到飞行中的位置（入场由滚动驱动时尤其如此）
       const saved = fanEls.map((e) => e.style.transform);
       fanEls.forEach((e) => (e.style.transform = ''));
       const r0 = fanEls[0]?.getBoundingClientRect();
+      slotLeft = fanEls.map((e) => e.offsetLeft);
       fanEls.forEach((e, i) => (e.style.transform = saved[i]));
       if (r0) { slotY = r0.top; slotH = r0.height; slotW = r0.width; }
+      panEnd = slotLeft.length > 1 ? slotLeft[1] + slotW / 2 - innerWidth / 2 : 0;
+      posterW = posters.map((e) => e.offsetWidth);
+      posterLeft = posters.map((e) => e.offsetLeft);
+      // 展开期要推进的距离：直接把第 2 张卡的中心对到屏幕中心（用测出来的，别用「一张牌间距」算——
+      // 牌堆是按卡片在屏幕居中摆的，而轨道布局左边有 padding-inline，两者差着半个 padding）
     };
     measureFan();
-    addEventListener('resize', measureFan);
+    measure();
+    const onResize = () => { measureFan(); measure(); };
+    addEventListener('resize', onResize);
+    addEventListener('load', onResize);
+
+    // 首次打开 / 刷新：都把入场自动滚一遍（牌自己一张张落进牌堆），用户一动手就交还控制权。
+    // 关键：刷新时浏览器恢复的滚动位置一律不要（靠 history.scrollRestoration='manual' + 下面把滚动压回 0）。
+    const AUTO_DUR = 1600;   // 入场自动播放时长（ms）
+    const AUTO_DELAY = 160;  // 顶部静置一下再开演（顺便压住浏览器恢复的滚动位置）
+    let autoT0 = performance.now() + AUTO_DELAY;
+    // 带锚点直接跳走，不演；从文章页返回（page-transition 已发 pt-back）也不重播——
+    // 返回时要恢复点击时的滚动位置，开场动画会把位置抢回去
+    let autoDone = location.hash.length > 1 || Boolean((window as any).__pt?.skipIntro);
+    const setScroll = (y: number) => {
+      const L = (window as any).__lenis;
+      if (L) L.scrollTo(y, { immediate: true });
+      else scrollTo(0, y);
+    };
+    const stopAuto = () => { autoDone = true; };
+    for (const ev of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+      addEventListener(ev, stopAuto, { passive: true });
+    }
+    addEventListener('pt-back', stopAuto);
     const easeInOut = (t: number) => {
       const x = Math.max(0, Math.min(1, t));
       return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
@@ -186,66 +389,95 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
     // 扇牌/瀑布共用级联顺序：0=同时，1=完全串行（底牌先、hero 压轴）
     const STAGGER = 0.55;
 
-    // 牌身自身的弯曲（不是轨迹弯）：把牌横切成 11 条——中条用原牌，其余克隆，
-    // 折角自顶边 0° 到底边 BEND_MAX 单向递增（所有条朝同一方向折）→ 牌整体卷成一条弧（像一个括号），
-    // 而不是两端对称的碗；近的那端自然大、远的那端自然小（近大远小）。
-    // 折角归 0 时移除克隆，牌恢复成一张平的标准矩形。
-    const BEND_MAX = 26;   // 整张牌卷过的总角度（度）：从顶边到底边的累计
-    const BEND_N = 11;     // 横切条数（奇数）；条数越多接缝折角越小、越不像被切开
-    const BEND_PERS = 900; // 视点距离：越小纵深收敛越明显，近大远小越看得出来
+    // 牌的两种分段形变（共用同一批克隆，互斥出现；不用时只藏起来，不拆 → 不闪不抖）：
+    //  rows —— 横切 11 条 + rotateX：拉牌入场时牌身自身单向卷曲（折角自顶边 0° 到底边 BEND_MAX）
+    //  cols —— 竖切 11 条 + rotateY：横向滑动时的“曲面屏”弯曲（牌面沿水平方向连续起弧）
+    const BEND_MAX = 26;    // rows：整张牌卷过的总角度（从顶边到底边）
+    const BEND_N = 11;      // 切条数（奇数）；条数越多接缝折角越小、越不像被切开（调小就是降开销）
+    const BEND_PERS = 900;  // rows 的视点距离
+    const CURVE_PERS = 1200; // cols（曲面屏）的视点距离：越小，弧的纵深收敛越明显
+    const SEG_OV = 0.5;     // 每条切片在接缝处多留 0.5%，叠一点免得出现发丝缝
+    type SegMode = 'rows' | 'cols';
     const bendSegs: (HTMLElement[] | null)[] = fanEls.map(() => null);
-    const applyBend = (i: number, deg: number) => {
+    const segClip: (SegMode | null)[] = fanEls.map(() => null);
+
+    // 第 k 条的切片：rows 是上下切（横向长条），cols 是左右切（竖向长条）
+    const clipFor = (k: number, mode: SegMode) => {
+      const a = Math.max(0, (k * 100) / BEND_N - SEG_OV);
+      const b = Math.max(0, 100 - ((k + 1) * 100) / BEND_N - SEG_OV);
+      return mode === 'rows'
+        ? `inset(${a.toFixed(2)}% 0 ${b.toFixed(2)}%)`
+        : `inset(0 ${b.toFixed(2)}% 0 ${a.toFixed(2)}%)`;
+    };
+
+    // 建一次就永久复用（懒建，从当前牌现拍一份，保证海报大字等内联样式与本体一致；中条用本体）
+    const ensureSegs = (i: number) => {
+      const cached = bendSegs[i];
+      if (cached) return cached;
       const el = fanEls[i];
       const card = el.firstElementChild as HTMLElement | null;
-      if (!card) return;
-      let segs = bendSegs[i];
-      if (deg < 0.5) {
-        // 落定：撤掉分段，牌就是一张平的标准长方形
-        if (!segs) return;
-        card.style.clipPath = '';
-        card.style.transformOrigin = '50% 50%';
-        card.style.clipPath = '';
-        card.style.transform = '';
-        card.style.transition = '';
-        segs.forEach((s) => { if (s !== card) s.remove(); });
-        el.style.perspective = '';
-        bendSegs[i] = null;
-        return;
-      }
-      if (!segs) {
-        // 懒建 + 从当前牌现拍，保证内联样式（如海报大字位置）与本体一致
-        const band = (k: number) => {
-          const a = Math.max(0, (k * 100) / BEND_N - 0.06);
-          const b = Math.max(0, 100 - ((k + 1) * 100) / BEND_N - 0.06);
-          return `inset(${a.toFixed(2)}% 0 ${b.toFixed(2)}%)`; // 上下切 → 宽度方向弯
-        };
-        const mid = (BEND_N - 1) / 2;
-        const list: HTMLElement[] = [];
-        for (let k = 0; k < BEND_N; k++) {
-          if (k === mid) { list.push(card); continue; } // 中条用本体
-          const c = card.cloneNode(true) as HTMLElement;
-          c.classList.add('bend-seg');
-          c.setAttribute('aria-hidden', 'true');
-          c.setAttribute('inert', '');
-          c.style.clipPath = band(k);
-          el.appendChild(c);
-          list.push(c);
-        }
-        card.style.transition = 'none'; // 弯的时候别被 hover 的 transform 过渡拖住
-        card.style.transformOrigin = '50% 50%';
-        card.style.clipPath = band(mid);
-        el.style.perspective = `${BEND_PERS}px`; // 各条共享一个视点，折面才连得上
-        segs = list;
-        bendSegs[i] = list;
-      }
-      // 折面链：角度自顶边 0° 到底边 deg 单向递增（单向卷曲 = 括号形）；
-      // 中条以自身中心为轴先折一半，然后上下两条链各自沿弧累计接缝位置（纵向 + 纵深）
+      if (!card) return null;
       const mid = (BEND_N - 1) / 2;
-      const h = card.clientHeight / BEND_N;           // 单条高度
+      const list: HTMLElement[] = [];
+      for (let k = 0; k < BEND_N; k++) {
+        if (k === mid) { list.push(card); continue; }
+        const c = card.cloneNode(true) as HTMLElement;
+        c.classList.add('bend-seg');
+        c.setAttribute('aria-hidden', 'true');
+        c.setAttribute('inert', '');
+        c.style.display = 'none';
+        // 视差画布不跟着克隆：<canvas> 的位图不会被 cloneNode 复制，留着就是一堆永远空白、
+        // 还可能被 querySelector('.fdpt') 误选中的空壳（切片期间本来也是 <img> 顶班）。
+        c.querySelector('.fdpt')?.remove();
+        el.appendChild(c);
+        list.push(c);
+      }
+      card.style.transition = 'none'; // 弯的时候别被 hover 的 transform 过渡拖住
+      card.style.transformOrigin = '50% 50%';
+      bendSegs[i] = list;
+      return list;
+    };
+
+    // 切模式只重写 clip（不重建 DOM）；同一个模式不会重复写
+    const setClip = (i: number, segs: HTMLElement[], mode: SegMode) => {
+      if (segClip[i] === mode) return;
+      segs.forEach((s, k) => { s.style.clipPath = clipFor(k, mode); s.style.display = ''; });
+      segClip[i] = mode;
+      // 切片的 clip 会把卡片自己的投影整块裁掉（投影在盒外），圆角缺口又会留在切片里被多个克隆叠成一团。
+      // 所以弯的时候把投影交给槽位（槽位不切片、不裁剪），卡本体一律不画投影。
+      fanEls[i].classList.add('is-bent');
+    };
+
+    // 回到平卡：本体清掉 clip/transform（恢复标准矩形 + hover 过渡），克隆全部藏起来
+    const flatSegs = (i: number) => {
+      const segs = bendSegs[i];
+      if (!segs || segClip[i] === null) return;
+      const card = fanEls[i].firstElementChild as HTMLElement;
+      card.style.clipPath = '';
+      card.style.transform = '';
+      card.style.transformOrigin = '50% 50%';
+      card.style.transition = '';
+      card.style.display = '';
+      segs.forEach((s) => { if (s !== card) s.style.display = 'none'; });
+      fanEls[i].style.perspective = '';
+      fanEls[i].classList.remove('is-bent');
+      segClip[i] = null;
+    };
+
+    // rows：折角自顶边 0° 到底边 deg 单向递增（单向卷曲 = 括号形，不是两端对称的碗）；
+    // 中条以自身中心为轴先折一半，然后上下两条链各自沿弧累计接缝位置（纵向 + 纵深）
+    const bendRows = (i: number, deg: number) => {
+      if (deg < 0.5) { flatSegs(i); return; }
+      const segs = ensureSegs(i);
+      if (!segs) return;
+      setClip(i, segs, 'rows');
+      fanEls[i].style.perspective = `${BEND_PERS}px`; // 各条共享一个视点，折面才连得上
+      const mid = (BEND_N - 1) / 2;
+      const h = slotH / BEND_N;                       // 单条高度（用缓存值，避免每帧读 clientHeight 触发重排）
       const rad = (d: number) => (d * Math.PI) / 180;
       const amt = (k: number) => (deg * k) / (BEND_N - 1);
       const put = (seg: HTMLElement, originY: number, ty: number, tz: number, ang: number) => {
-        seg.style.transformOrigin = `50% ${((originY / (h * BEND_N)) * 100).toFixed(3)}%`;
+        seg.style.transformOrigin = `50% ${((originY / slotH) * 100).toFixed(3)}%`;
         seg.style.transform = `translate3d(0px, ${ty.toFixed(2)}px, ${tz.toFixed(2)}px) rotateX(${ang.toFixed(2)}deg)`;
       };
       const phiMid = amt(mid), thMid = rad(phiMid);
@@ -271,16 +503,54 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       }
     };
 
+    // cols：曲面屏。把整张牌“卷”到一根竖直圆柱面上，用【等弧长】映射：条中心的平面位置 c 就是弧长，
+    // 所以角 ψ=c/R、3D 位置 (R sinψ, ±R(1-cosψ))、并绕自身中心转 -ψ。
+    // 关键：相邻条落在同一条弧的公共弦上 → 两边投影到同一个点，再怎么滑也不会裂开。
+    // cols = null 回到平卡。CYL_DIR=+1 弧的两端向观众（凹，像曲面显示器）；-1 则两端后退。
+    const bendCols = (i: number, cols: { rot: number; dx: number; z: number }[] | null) => {
+      if (!cols) { flatSegs(i); return; }
+      const segs = ensureSegs(i);
+      if (!segs) return;
+      setClip(i, segs, 'cols');
+      const el = fanEls[i];
+      const want = `${CURVE_PERS}px`;
+      if (el.style.perspective !== want) el.style.perspective = want;
+      segs.forEach((seg, k) => {
+        const c = cols[k];
+        seg.style.transformOrigin = `${(((k + 0.5) * 100) / BEND_N).toFixed(3)}% 50%`;
+        seg.style.transform = `translate3d(${c.dx.toFixed(2)}px, 0px, ${c.z.toFixed(2)}px) rotateY(${c.rot.toFixed(2)}deg)`;
+      });
+    };
+
     (window as any).__fx = (window as any).__fx || [];
     (window as any).__fx.push(() => {
+      // 自动播放入场：先压回顶部，再从 0 从容滚到 INTRO_DIST（牌一张张落进牌堆）
+      if (!autoDone) {
+        const ap = (performance.now() - autoT0) / AUTO_DUR;
+        if (ap <= 0) {
+          if (scrollY > 4) autoDone = true;                     // 用户已经自己动了 → 交还控制权
+          else setScroll(0);                                    // 压住刷新恢复的位置
+        } else if (ap >= 1) {
+          setScroll(INTRO_DIST()); autoDone = true;
+        } else {
+          setScroll(INTRO_DIST() * (1 - Math.pow(1 - ap, 3)));  // easeOutCubic
+        }
+      }
       const r = journey.getBoundingClientRect();
       const S = Math.max(0, -r.top);
       // 第一段：拉牌入场（S ∈ [0, INTRO_DIST]）——直接由滚动位置驱动，向上滚即反向擦洗
       const introRaw = Math.max(0, Math.min(1, S / INTRO_DIST()));
       // 第二段：展开期（前 UNFOLD_DIST）轨道 Hold 不动，铺平完成后 conveyor 才启动
       const SUnfold = Math.max(0, S - INTRO_DIST());
-      const STrack = Math.max(0, SUnfold - UNFOLD_DIST);
-      const p = dist > 0 ? Math.min(1, STrack / dist) : 0;
+      // 第二段：展开期牌一边铺开、整条轨道一边就开始“向右走”，走满 panEnd →
+      // 铺平完成时屏幕中心正好落在第 2 张卡的中心；此后由 conveyor 接管常规横向推进
+      const unfoldRaw = Math.max(0, Math.min(1, SUnfold / UNFOLD_DIST));
+      const unfoldPe = easeInOut(unfoldRaw);
+      const conveyor = Math.max(0, SUnfold - UNFOLD_DIST) * TRACK_SPEED;
+      const STrack = panEnd * unfoldPe + conveyor;
+      // 曲线描绘、斜切、曲面屏都只认 conveyor（不加展开期那段推进）→ 观感与改动前一致，
+      // 不会出现“牌刚落地就被拉弯/斜切”
+      const p = dist > panEnd ? Math.min(1, conveyor / (dist - panEnd)) : 0;
 
       // 整条轨道：放平完成后，垂直滚动进度 → 水平位移
       track.style.transform = `translate3d(${(-STrack).toFixed(2)}px, 0, 0)`;
@@ -293,13 +563,24 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       });
 
       // 滚轴变形：视觉滚动速度 → 卡片斜切（快速拨滚轮时像滚轴卷过）
-      const v = STrack - prevStrack; prevStrack = STrack;
+      const v = conveyor - prevConveyor; prevConveyor = conveyor;
       vSmooth += (v - vSmooth) * 0.12;
-      const skew = Math.max(-7, Math.min(7, vSmooth * 0.05));
+      if (Math.abs(vSmooth) < 0.02) vSmooth = 0;   // 死区：静止时彻底回到纯平面
+      // 注：这里曾经按速度给卡片 skewX 斜切（随滑动方向摆动），已去掉；速度只用来驱动曲面屏曲率。
 
+      // 曲面屏曲率：横向速度 → 圆柱半径 R。静止 R≈∞ → 完全平面；滑得越快 R 越小、弧越重。
+      // 半径按“曲率”线性插值（1/R ∝ 速度）；停止滑动后 vSmooth 指数衰减 → 曲率自己化掉。
+      const CYL_DIR = 1;        // +1：弧的两端朝观众（凹，像曲面显示器）；-1：两端后退（凸）
+      const CYL_REF = 3000;     // px/s：横向速度到这里曲率拉满（调大 = 要滑更快才明显弯）
+      const CYL_MAX_DEG = 28;   // 可见范围边缘处的最大倾角（弧度总量，调大 = 弯得更狠）
+      const cylK = Math.min(1, Math.abs(vSmooth * 60) / CYL_REF);
+      // 半径按视口算：让“可见范围边缘”恰好等于 CYL_MAX_DEG，再热滑到 cylK=1 → 可见部分永远是平滑段
+      const cylSafe = (innerWidth / 2 + slotW / 2) * 1.15;                       // 盖住可见跨度（+5% 余量）的弧长
+      const cylFull = Math.max(1500, cylSafe / ((CYL_MAX_DEG * Math.PI) / 180));
+      const cylR = cylFull / Math.max(cylK, 1e-6);
+      // 开/关带滞回：速度在阈值附近抖动时不要反复显隐切片（那也是一次闪）
+      cylOn = cylK > (cylOn ? 0.004 : 0.02);
       // 花切拉牌：先落到屏幕中心牌堆，之后滚动再平移展开回轨道（牌不缩放）
-      const flyRaw = Math.max(0, Math.min(1, SUnfold / UNFOLD_DIST));
-      const flyPe = easeInOut(flyRaw);
       const vw = innerWidth, vh = innerHeight;
       const cx = innerWidth / 2, cy = innerHeight / 2;
 
@@ -317,21 +598,48 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       fanEls.forEach((el, i) => {
         // 底牌先甩出去、hero 压轴（避免顶牌展开时遮住后面的牌）
         const t0 = ((N - 1 - i) / (N - 1)) * STAGGER;
-        const flyPe = easeInOut((flyRaw - t0) / (1 - STAGGER));
-        if (flyRaw >= 0.999) {
-          // 完全铺平后回归中性 transform（只留滚轴斜切）
-          applyBend(i, 0);
+        const flyPe = easeInOut((unfoldRaw - t0) / (1 - STAGGER));
+        if (unfoldRaw >= 0.999) {
+          // 完全铺平：牌回到平卡，曲率改由分段实现（牌面自己弯，不是整卡刚性倾斜）
+          if (segClip[i] === 'rows') flatSegs(i);   // 只在本牌刚从入场段切过来时清一次（不要每帧都清，否则分段反复重建/重写 → 闪）
           if (el.style.transformOrigin) { el.style.transformOrigin = ''; el.style.zIndex = ''; }
-          el.style.transform = `skewX(${skew.toFixed(2)}deg)`;
-          const tg = el.querySelector<HTMLElement>('.tag');
+          if (el.style.transform) el.style.transform = '';   // 铺平后槽位不带 transform（不倾斜，曲率只由切片承担）
+          // 曲面屏：只弯还在视口附近、且横向真的在动的牌（远处看不见的保持平卡，省分段）
+          const xc = slotLeft[i] - STrack + slotW / 2 - cx;
+          if (cylOn && Math.abs(xc) < vw * 1.2) {
+            // 等弧长映射：条的平面位置 c 就是弧长 → ψ=c/R，落在 (R·sinψ, ±R(1-cosψ))，绕自身中心转 -ψ。
+            // 可见范围一定落在平滑段，所以视野内是精确的。
+            // 超出范围的条【冻结在 cap 上】，不要沿切线继续延伸：延伸会让 z 无上限地涨
+            // （跟 c 成正比），透视缩放 1/(1-z/D) 一旦到 2x 上下，这一条的栅格纹理就会被拉成大糊片
+            // —— 快速滑动（曲率拉满、z 最大）时尤其明显。冻结后 z 有上界（约 1.24x），而且这些条全在屏外。
+            const capS = cylSafe;
+            const colW = slotW / BEND_N;
+            const cols: { rot: number; dx: number; z: number }[] = [];
+            for (let k = 0; k < BEND_N; k++) {
+              const c = xc + (k - (BEND_N - 1) / 2) * colW;
+              const ac = Math.max(-capS, Math.min(capS, c));
+              const psi = ac / cylR;
+              const cs = Math.cos(psi), sn = Math.sin(psi);
+              cols.push({
+                rot: (-CYL_DIR * psi * 180) / Math.PI,
+                dx: cylR * sn - c,
+                z: CYL_DIR * cylR * (1 - cs),
+              });
+            }
+            bendCols(i, cols);
+          } else {
+            bendCols(i, null);
+          }
+          const tg = fanTags[i];
           if (tg) tg.style.opacity = '';
           return;
         }
+        bendCols(i, null); // 入场段用 rows 卷曲，这里确保没有残留的曲面屏分段
         const pp = pilePose[i];
         // 甩牌进度：与展开同一级联顺序，由 introRaw 驱动（可正可反）
         const enterRaw = Math.max(0, Math.min(1, (introRaw - t0) / (1 - STAGGER)));
         const landPe = 1 - Math.pow(1 - enterRaw, 2); // easeOutQuad：进堆时减速
-        const naturalX = el.offsetLeft - STrack;
+        const naturalX = slotLeft[i] - STrack;
         // 直线位置：从屏外沿 dir 一直滑到居中牌堆位；同一条线、同一朝向，只有先后之分
         const back = 1 - landPe;   // 还没走完的比例
         const endX = cx - slotW / 2 + pp.x * landPe;
@@ -347,24 +655,29 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         // 入场不做平面旋转（pp.r 恒为 0）→ 落到屏幕上就是一个标准长方形
         const theta = pp.r * (1 - flyPe);
         // 牌身自身的弯曲：牌一进画面就是最弯的（BEND_MAX），接近牌堆时逐渐捋平，落定完全归 0
-        applyBend(i, BEND_MAX * Math.min(1, (1 - landPe) / 0.6) * (1 - flyPe));
+        bendRows(i, BEND_MAX * Math.min(1, (1 - landPe) / 0.6) * (1 - flyPe));
         el.style.transformOrigin = '50% 50%';
         el.style.zIndex = String(20 + (N - i)); // hero 最上
         el.style.opacity = '1'; // 飞行全程实心（源头在屏外，无需淡入）
         el.style.transform =
-          `perspective(${PERSP}px) translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, ${lineZ.toFixed(1)}px) rotate(${theta.toFixed(2)}deg) skewX(${skew.toFixed(2)}deg)`;
+          `perspective(${PERSP}px) translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, ${lineZ.toFixed(1)}px)` +
+          ` rotate(${theta.toFixed(2)}deg)`;
       });
 
-      // 海报卡内部字体平移：卡片进入视野开始，到达视口中心时滑到末位，之后冻结
-      for (const el of posters) {
-        const word = el.querySelector<HTMLElement>('.pword');
-        if (!word) continue;
-        const w = el.offsetWidth;
-        const left = el.offsetLeft; // 布局位置（相对 track，不受 transform 影响）
+      // 海报卡内部字体平移：卡片进入视野开始，到达视口中心时滑到末位，之后冻结。
+      // 必须写成 CSS 变量 --pan（.pword 的 transform 里就用它）而不是给 .pword 写 inline transform：
+      // 变量会继承到切片的每个克隆上 → 弯牌时 11 条切片里的字永远同步；
+      // 写 inline 的话只有本体在动，克隆拿的是旧快照 → 字会被切成错位的几片。
+      for (let i = 0; i < posters.length; i++) {
+        const el = posters[i];
+        const w = posterW[i], left = posterLeft[i];
+        if (!w) continue;
         const sEnter = left - innerWidth;
         const sCenter = left + w / 2 - innerWidth / 2;
         const prog = sCenter > sEnter ? Math.min(1, Math.max(0, (STrack - sEnter) / (sCenter - sEnter))) : 1;
-        word.style.transform = `translateX(calc(-50% + ${((0.10 - 0.26 * prog) * w).toFixed(1)}px))`;
+        // 量化到 0.5px 再比较：变量一变，11 条切片里的字就都要重绘；慢慢滚时每帧挪不到 1px，没必要每帧都刷
+        const pan = Math.round((0.10 - 0.26 * prog) * w * 2) / 2;
+        if (pan !== lastPan[i]) { el.style.setProperty('--pan', `${pan}px`); lastPan[i] = pan; }
       }
 
       // 首帧就位后揭开轨道（消除刷新闪烁）

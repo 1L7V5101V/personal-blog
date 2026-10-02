@@ -41,6 +41,8 @@ const path = Astro.url.pathname;
 
     <script>
       import Lenis from 'lenis';
+      // 点开卡片 / 返回的整页过渡（模块先于本脚本与各页脚本执行）
+      import '../scripts/page-transition';
 
       const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -49,6 +51,8 @@ const path = Astro.url.pathname;
       if (!reduced) {
         lenis = new Lenis({ lerp: 0.12 });
       }
+      // 暴露给页面脚本（首页自动播放入场需要程序化驱动滚动，且必须经由 Lenis 才不会被它抢回来）
+      (window as any).__lenis = lenis;
 
       // 统一 rAF：各页面的滚动联动回调都挂到 __fx 上，这里统一驱动
       (window as any).__fx = (window as any).__fx || [];

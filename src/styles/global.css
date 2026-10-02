@@ -150,6 +150,9 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 
 /* 悬停：卡片内容轻微放大 */
 .slot .hero-card, .slot .hcard, .slot .poster, .slot .listpanel-card {
+  /* 卡片也要成层：弯牌时本体就是切片里的「中条」，它和其余 10 条必须处在同一种渲染路径上，
+     否则中条两边会跟克隆片看起来不一样（曾被读成“被切片”）。
+     卡上已经没有 box-shadow 了（挪到 .slot::before 去了），所以这层里只有内容 + 变换，很便宜。 */
   transition: transform 0.45s var(--ease-out), box-shadow 0.45s var(--ease-out);
   will-change: transform;
 }
@@ -165,14 +168,38 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   margin: 0 !important;
   pointer-events: none;
   transition: none !important;
+  /* 切片必须自成合成层：它们是每帧都在变的 3D 变换，不成层就得每帧重绘，
+     把栅格预算吃穿 → Chrome 会主动降低栅格尺度（整屏发糊），或让相邻片的重绘进度不一致（看着被切片）。
+     成层后逐帧只做合成。（投影因此放在 .slot::before 单独一层：模糊半径 50px 的东西不能和
+     逐帧重绘的内容挤同一层，否则每帧都要重画它。） */
   will-change: transform;
 }
 
-/* 槽位：卡外元素（标签/图注/提示）全部绝对定位，槽内只有卡，保证所有卡垂直中心对齐 */
+/* 槽位：卡外元素（标签/图注/提示）全部绝对定位，槽内只有卡，保证所有卡垂直中心对齐。
+   投影挂槽位、不挂卡片：卡片会被切成 11 条，clip-path 会把盒外的投影整块裁掉（滑起来投影消失），
+   圆角的缺口又留在 band 里、被多个克隆的投影叠成一团发黑（看着像被填成直角）。
+   槽位不切片、不裁剪，而且常驻同一个元素 → 弯/不弯切换时投影不会跟着搬家（那也是一次闪烁）。
+   ⚠ 别把投影放回卡片：槽位每帧都在改 transform，投影若画进「轨道」那个大图层，
+   每帧都要重画整条轨道的瓦片 → 正是“滚轮一滑整个界面闪”的来源。槽位自己一层（见下方桌面端媒体查询）。 */
 .slot {
   flex: none;
   position: relative;
   width: min(75vw, 76rem);
+  isolation: isolate;   /* 自己的层叠上下文：下面的投影伪元素才稳稳定在卡片下面（移动端没有 will-change 也成立） */
+}
+/* 投影画在自己的层上（::before + will-change），别和卡片内容挤同一个图层：
+   切片每帧都在重绘，投影要是同层就得跟着一遍遍重新栅格化（模糊半径 50px，很贵）→ 闪 + 卡。
+   位置在卡片之前（DOM 顺序）、无 z-index，所以它天然垫在卡片下面。 */
+.slot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-r);
+  corner-shape: superellipse(2);
+  box-shadow: 0 18px 50px rgba(20, 20, 20, 0.07), 0 2px 8px rgba(20, 20, 20, 0.05);
+  pointer-events: none;
+  z-index: -1;
+  will-change: transform;
 }
 .slot .tag {
   position: absolute;
@@ -189,9 +216,20 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .heroeslot { width: min(75vw, 76rem); }
 .hero-card, .hcard .imgbox, .poster, .listpanel-card {
   border-radius: var(--card-r);
-  corner-shape: superellipse(2);
-  box-shadow: 0 18px 50px rgba(20, 20, 20, 0.07), 0 2px 8px rgba(20, 20, 20, 0.05);
+  corner-shape: superellipse(2);   /* 投影在 .slot 上（见上），卡片自己不带 */
 }
+/* 弯牌期间卡片本体必须关掉 transform 过渡。
+   本体就是切片里的「中条」：克隆片是 transition:none 立即到位，它若还挂着 0.45s 过渡，
+   快速滑动时会一直落后于其余 10 条，停在旧曲率上 —— 看起来就是弧面中间「凸出来一条」。
+   （.slot > .bend-seg 的 transition:none 只管克隆；本体是卡片自己，得单独压。
+   is-bent 由分段代码在切模式时打上、铺平时摘掉。） */
+.slot.is-bent > .hero-card,
+.slot.is-bent > .hcard,
+.slot.is-bent > .poster,
+.slot.is-bent > .listpanel-card {
+  transition: none !important;
+}
+
 .hero-card {
   position: relative;
   display: flex;
@@ -240,56 +278,76 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 }
 .dot-orange { background: var(--orange); }
 
-/* 图片卡：大图 + 悬停虚化 + 幕帘 + 呼吸缩放 */
+/* 图片卡：大图 + 悬停虚化 + 幕帘 + 呼吸缩放（图注/标题/日期已去掉，卡下不再有任何文字） */
 .hcard { display: block; width: 100%; }
 .hcard figure { margin: 0; position: relative; }
-.hcard figcaption {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding-top: 0.9rem;
-}
 .hcard .imgbox {
+  position: relative;   /* 视差画布 .fdpt 绝对定位在图片上方 */
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: var(--card);
 }
-.hcard img {
+/* 图片卡悬停：① 散焦 → 一次性对焦　② 鼠标视差（深度图 + WebGL 逐像素位移，见 index.astro）
+   ⚠ 悬停状态挂在 .slot 上（is-hovering），不用 :hover —— 卡片弯成 11 条时，克隆片是
+   pointer-events:none 的副本，永远匹配不到 :hover，只有本体（中条）会动，接缝立刻穿帮。
+   槽位是本体和克隆的共同祖先，状态挂在它身上两边一起动。
+   .fdpt 是叠在 <img> 上的视差画布：没鼠标移动时它画的像素和 <img> 完全一样（同一张图、
+   同样的 object-fit: cover 映射），所以两者必须一起做对焦/一起被切片禁用，否则会露出「一半糊」。 */
+.hcard img,
+.hcard .fdpt {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  transition:
-    filter 0.5s var(--ease-out),
-    transform 0.5s var(--ease-out);
+  transition: filter 0.5s var(--ease-out);
   will-change: filter;
 }
-@media (hover: hover) {
-  .hcard:hover img {
-    filter: blur(14px) saturate(0.7) brightness(0.92);
-    transform: scale(1.04);
+.hcard .fdpt {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;   /* 纹理上传完才由 JS 打开：上传前画布是黑的，不能盖住 <img> */
+}
+/* 切片期间画布必须让位：克隆是 cloneNode 出来的，<canvas> 的位图不会被复制（克隆片是空白的）。
+   隐藏画布、露出 <img> 后，本体与 11 条克隆渲染的是同一样东西。 */
+.slot.is-bent .hcard .fdpt {
+  display: none;
+}
+/* 切片期间图片自己的过渡也要关：克隆是新建元素、没有过渡历史，一上来就是终值；
+   本体若还在过渡中（对焦动画被上面掐断时的 filter 回落），接缝就会一半到了、一半没到。 */
+.slot.is-bent .hcard img {
+  transition: none;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .slot.is-hovering .hcard img,
+  .slot.is-hovering .hcard .fdpt {
+    animation: hcard-focus 900ms var(--ease-out) forwards;
   }
-  .hcard:hover figcaption .go { opacity: 1; transform: none; }
+  /* 已经对完焦、或正在弯牌切片时，别让散焦动画跑起来：
+     ① 切片是 cloneNode 快照，晚建的克隆动画相位和本体对不上 → 接缝一半糊一半清；
+     ② 弯牌时 11 条切片各自跑 blur 动画，栅格开销直接 ×11。
+     两种情况都退回清晰态（is-focused 由 JS 定时器打上，不依赖 animationend，被中断也能收尾）。 */
+  .slot.is-focused .hcard img,
+  .slot.is-bent .hcard img,
+  .slot.is-focused .hcard .fdpt,
+  .slot.is-bent .hcard .fdpt {
+    animation: none;
+  }
 }
-.hcard figcaption {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding-top: 0.9rem;
-}
-.hcard .t { font-size: clamp(1rem, 1.6vw, 1.3rem); font-weight: 600; letter-spacing: -0.01em; }
-.hcard .d { font-size: 0.8rem; color: var(--fg-3); white-space: nowrap; }
-.hcard .go {
-  opacity: 0;
-  transform: translateX(-6px);
-  transition: opacity 0.4s, transform 0.4s var(--ease-out);
-  color: var(--fg-2);
+/* 对焦曲线：散焦 → 一次拉回、平滑落定。刻意「不冲过焦点、不回抽」——
+   拉风箱式来回虽然像真镜头，但画面糊一下清一下再糊一下，看久了头晕。 */
+@keyframes hcard-focus {
+  0% {
+    filter: blur(0px) saturate(1) brightness(1);
+    animation-timing-function: cubic-bezier(0.2, 0.85, 0.3, 1);
+  }
+  13% {
+    filter: blur(17px) saturate(0.72) brightness(0.9);
+    animation-timing-function: cubic-bezier(0.16, 0.7, 0.24, 1);   /* 前快后慢 = 像镜头收力落焦，且全程单调不越界 */
+  }
+  100% {
+    filter: blur(0px) saturate(1) brightness(1);
+  }
 }
 
 /* 字体海报卡：巨型裁切文字 + 色块圆，纯白无框 */
@@ -526,11 +584,64 @@ footer.site {
   text-transform: uppercase;
 }
 
+/* ---------- 页面过渡：点开卡片 / 返回 ---------- */
+/* 纸片（.pt-paper）盖在页面之上：正向从卡片版位放大到满屏，反向从满屏缩回卡片。
+   全部是合成层变换 + opacity，不进 __fx 的 rAF 循环，由 page-transition 用 WAAPI 驱动。 */
+.pt-curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  overflow: hidden;
+}
+.pt-paper {
+  position: absolute;
+  background: #fff;
+  border-radius: var(--card-r);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(20, 20, 20, 0.2);
+  will-change: transform, opacity, border-radius;
+}
+/* 纸片里的克隆：禁掉一切动的东西（hover/对焦/过渡在克隆里都不该出现）*/
+.pt-paper *,
+.pt-paper img {
+  animation: none !important;
+  transition: none !important;
+}
+.pt-paper img {
+  filter: none !important;
+}
+/* 点开期间把来源卡的 hover 缩放压掉：纸片是按“未悬浮”尺寸拍的，卡片得回到同一尺寸 */
+.slot.pt-opening > .hero-card,
+.slot.pt-opening > .hcard,
+.slot.pt-opening > .poster,
+.slot.pt-opening > .listpanel-card {
+  transform: scale(1) !important;
+  transition: none !important;
+}
+/* 到达文章页：内容从卡片方向升起（page-transition 在目标页打 html.pt-arrive）*/
+html.pt-arrive .article {
+  animation: pt-rise 0.72s 0.06s var(--ease-out) both; /* 延迟 60ms：白纸先退、内容跟随"灌"进来 */
+}
+@keyframes pt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ---------- 移动端 ---------- */
 /* 首帧门控：等 fx 摆好扇位再显形（仅桌面，JS 失效时不遮蔽由媒体查询兜底） */
 @media (min-width: 769px) and (prefers-reduced-motion: no-preference) {
   .journey:not(.fx-ready) .track { opacity: 0; }
   .journey .track { transition: opacity 0.3s ease; }
+  /* 每帧都在改 transform 的元素各自成层：否则它们的重绘会打到父层（整条轨道 / 整个 stage）的瓦片上 */
+  .slot { will-change: transform; }
+  .hline { will-change: transform; }
 }
 
 @media (max-width: 768px) {

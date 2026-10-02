@@ -3,6 +3,7 @@ title: 为什么我又开始写博客了
 date: 2026-10-02
 tag: 随笔
 cover: /img/p1.jpg
+depth: /img/p1-depth.webp
 ---
 
 收藏夹越来越厚，写出来的东西越来越少。这是决定重新开一个博客的直接原因。

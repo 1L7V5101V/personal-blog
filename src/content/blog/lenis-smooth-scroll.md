@@ -3,6 +3,7 @@ title: 惯性滚动的手感是怎么调出来的
 date: 2026-09-15
 tag: 前端
 cover: /img/p4.jpg
+depth: /img/p4-depth.webp
 ---
 
 本站的滚动用的是 Lenis，核心思路一句话：**不劫持滚动，只缓冲它**。

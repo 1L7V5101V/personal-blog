@@ -3,6 +3,7 @@ title: GLSL 入门笔记：从一张渐变开始
 date: 2026-09-20
 tag: 图形
 cover: /img/p3.jpg
+depth: /img/p3-depth.webp
 ---
 
 所有 shader 教程的第一课都是一张渐变，这不是没有道理的。
