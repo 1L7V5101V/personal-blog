@@ -214,8 +214,8 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       const cx = innerWidth / 2, cy = innerHeight / 2;
 
       fanEls.forEach((el, i) => {
-        // 瀑布落牌：顶牌先落，后面逐张跟着（级联时序）
-        const t0 = (i / (N - 1)) * STAGGER;
+        // 瀑布落牌：底下的牌先走，顶牌 hero 压轴最后归位（避免顶牌展开时遮住后面的牌）
+        const t0 = ((N - 1 - i) / (N - 1)) * STAGGER;
         const flyPe = easeInOut((flyRaw - t0) / (1 - STAGGER));
         if (flyRaw >= 0.999) {
           // 完全铺平后回归中性 transform（只留滚轴斜切）
