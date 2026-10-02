@@ -9,7 +9,7 @@ const featured = posts.slice(0, 4);
 const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 ---
 <Base>
-  <!-- 整页横向 journey：垂直滚动驱动整条轨道，全部内容在一根轴上 -->
+  <!-- 整页横向 journey：垂直滚动驱动整条轨道（瑞士海报风） -->
   <section class="journey" id="journey">
     <div class="stage">
       <svg class="hline" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true">
@@ -21,67 +21,81 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       </svg>
 
       <div class="track">
-        <!-- 1 · Hero -->
-        <section class="panel hero">
-          <span class="label" data-reveal style="--i:0">il7510n · 个人博客</span>
-          <h1><span class="mask"><span data-reveal style="--i:1">il7510n</span></span></h1>
-          <p class="bio"><span class="mask"><span data-reveal style="--i:2">写代码，也写字。这里放慢一点，想清楚一点。</span></span></p>
-          <p class="hint" data-reveal style="--i:3">向下滚动，整页向右 →</p>
+        <!-- 1 · Hero：白卡 + 阶梯缩进 + 黄圆 -->
+        <section class="slot heroeslot">
+          <a class="hero-card" href="/blog/">
+            <span class="dot" style="width: 68%; right: -8%; top: 50%; transform: translateY(-50%);"></span>
+            <div class="hero-text">
+              <span class="lname"><span class="mask"><span data-reveal style="--i:0">il7510n</span></span></span>
+              <span class="line s1"><span class="mask"><span data-reveal style="--i:1">写代码，也写字。</span></span></span>
+              <span class="line s2"><span class="mask"><span data-reveal style="--i:2">这里放慢一点，</span></span></span>
+              <span class="line s3"><span class="mask"><span data-reveal style="--i:3">想清楚一点。</span></span></span>
+            </div>
+          </a>
+          <p class="hero-hint" data-reveal style="--i:4">向下滚动，整页向右 →</p>
         </section>
 
-        <!-- 2 · 图片卡 -->
+        <!-- 2 · 图片卡（悬停虚化） -->
         {featured.map((p, i) => (
-          <a class="hcard" data-io style={`--i:${i}`} href={`/blog/${p.id}/`}>
-            <figure>
-              <div class="imgbox">
-                {p.data.cover && <img src={p.data.cover} alt="" loading="lazy" />}
-              </div>
-              <figcaption>
-                <span class="t">{p.data.title}</span>
-                <span class="d">{fmt(p.data.date)}</span>
-                <span class="go">→</span>
-              </figcaption>
-            </figure>
-          </a>
+          <div class="slot">
+            <span class="tag">{String(i + 1).padStart(2, '0')} · {p.data.tag}</span>
+            <a class="hcard" data-io style="--i:0" href={`/blog/${p.id}/`}>
+              <figure>
+                <div class="imgbox">
+                  {p.data.cover && <img src={p.data.cover} alt="" loading="lazy" />}
+                </div>
+                <figcaption>
+                  <span class="t">{p.data.title}</span>
+                  <span class="d">{fmt(p.data.date)}</span>
+                  <span class="go">→</span>
+                </figcaption>
+              </figure>
+            </a>
+          </div>
         ))}
 
-        <!-- 3 · 纯文字卡（过中心后加速滑向末尾） -->
-        <a class="tcard" data-speed href="/blog/why-blog-again/">
-          <span class="tin" data-io style="--i:0">
-            <span class="q">“</span>
-            <p class="big">收藏夹越来越厚，<br/>写出来的越来越少。</p>
-            <span class="sub">为什么我又开始写博客了 →</span>
-          </span>
-        </a>
-        <a class="tcard" data-speed href="/blog/deconstruct-lusion-scroll/">
-          <span class="tin" data-io style="--i:0">
-            <span class="q">“</span>
-            <p class="big">Lusion 玄吗？<br/>拆开全是基础功。</p>
-            <span class="sub">把 Lusion 的滑动效果拆开看 →</span>
-          </span>
-        </a>
-        <a class="tcard" data-speed href="/blog/lenis-smooth-scroll/">
-          <span class="tin" data-io style="--i:0">
-            <p class="stat">100<span>%</span></p>
-            <p class="big">动效全手写，<br/>零现成模板。</p>
-            <span class="sub">惯性滚动的手感是怎么调出来的 →</span>
-          </span>
-        </a>
+        <!-- 3 · 字体海报卡（巨型裁切文字 + 色块圆；过中心后爆发加速） -->
+        <div class="slot" data-speed>
+          <span class="tag">为什么我又开始写博客了</span>
+          <a class="poster" data-io style="--i:0" href="/blog/why-blog-again/">
+            <span class="dot pdot" style="width: 46%; right: 7%; top: 9%;"></span>
+            <span class="pword">写</span>
+            <span class="psub">收藏夹越来越厚，写出来的越来越少。</span>
+          </a>
+        </div>
+        <div class="slot" data-speed>
+          <span class="tag">把 Lusion 的滑动效果拆开看</span>
+          <a class="poster" data-io style="--i:0" href="/blog/deconstruct-lusion-scroll/">
+            <span class="dot dot-orange pdot" style="width: 46%; right: 7%; top: 9%;"></span>
+            <span class="pword">拆</span>
+            <span class="psub">幕帘、缩放、描线——全是基础功。</span>
+          </a>
+        </div>
+        <div class="slot" data-speed>
+          <span class="tag">惯性滚动的手感是怎么调出来的</span>
+          <a class="poster" data-io style="--i:0" href="/blog/lenis-smooth-scroll/">
+            <span class="dot pdot" style="width: 42%; right: 6%; top: 12%;"></span>
+            <span class="pword">100%</span>
+            <span class="psub">动效全手写 · 零现成模板</span>
+          </a>
+        </div>
 
-        <!-- 4 · 全部文章 -->
-        <section class="panel listpanel">
-          <span class="label" data-io style="--i:0">全部文章</span>
-          <div class="list">
-            {posts.map((p, i) => (
-              <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.id}/`}>
-                <span class="t">{p.data.title}</span>
-                <span class="m">{p.data.tag} · {fmt(p.data.date)}</span>
-              </a>
-            ))}
+        <!-- 4 · 全部文章：白卡 -->
+        <section class="slot listpanel">
+          <span class="tag">全部文章 · {posts.length} 篇</span>
+          <div class="listpanel-card">
+            <div class="list">
+              {posts.map((p, i) => (
+                <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.id}/`}>
+                  <span class="t">{p.data.title}</span>
+                  <span class="m">{p.data.tag} · {fmt(p.data.date)}</span>
+                </a>
+              ))}
+            </div>
           </div>
         </section>
 
-        <!-- 5 · 宣言 -->
+        <!-- 5 · 宣言：直接写在画布上 -->
         <section class="panel manifesto">
           <p data-io style="--i:0">把字写清楚。</p>
           <p data-io style="--i:1">把代码写简单。</p>
@@ -120,7 +134,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
     addEventListener('resize', measure);
     addEventListener('load', measure);
 
-    const SPEED = 1.8;      // 纯文字卡相对轨道的速度倍率
+    const SPEED = 1.8;      // 海报卡相对轨道的速度倍率
     const MAX_EXTRA = 640;  // 加速位移上限（保证完全滑出屏幕）
     const LERP = 0.12;      // 追赶平滑度
     const state = fastCards.map(() => ({ cur: 0 }));
@@ -137,10 +151,10 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       // 曲线描绘：滚多少画多少
       if (curve) curve.style.strokeDashoffset = String(1 - p);
 
-      // 纯文字卡：整卡完全离开视口中心后以 SPEED 倍爆发加速，lerp 追赶滑向末尾
+      // 海报卡：整卡完全离开视口中心后以 SPEED 倍爆发加速，lerp 追赶滑向末尾
       fastCards.forEach((el, i) => {
-        const layoutCenter = el.offsetLeft + el.offsetWidth / 2;      // 布局位置（不受 transform 影响）
-        const fullyPastAt = layoutCenter + el.offsetWidth / 2 - innerWidth / 2; // 尾边越过中心点所需的轨道位移
+        const layoutCenter = el.offsetLeft + el.offsetWidth / 2;
+        const fullyPastAt = layoutCenter + el.offsetWidth / 2 - innerWidth / 2;
         const target = Math.max(0, Math.min((S - fullyPastAt) * (SPEED - 1), MAX_EXTRA));
         const st = state[i];
         st.cur += (target - st.cur) * LERP;
