@@ -65,8 +65,10 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
                                 // 22 让「正文 / h3 / h2 / h1」四档一眼分得开
     const RG_GAP = 8;           // 刻度间距：固定小值，不随文章长度变
     const AVAIL = 0.62;         // 窗口最多占视口高度的百分比
-    const PREFER = 28;          // 「更大层级优先」的判定距离
+    const BALL_EASE = 0.06;   // 光球补间速率：越小越慢（时间常数 ≈ -16.7/ln(1-rate)）
+                           // 0.12 → 约 160ms，0.06 → 约 325ms
     const BALL_MAX = 16, BALL_MIN = 7;   // 光球直径：最大层级 / 最小层级
+    const PREFER = 28;        // 「更大层级优先」的判定距离
 
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -211,14 +213,7 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       const a = active();
       const M = 104;
       const target = Math.min(Math.max(a.top - scrollY + a.h / 2, M), vh - M);
-
-      // ⚠ 追赶速度必须随距离变快。固定 0.12（τ≈160ms）看着「流畅」，
-      // 但快速往上滚时目标会瞬间跳到球的上方几百像素，球还在原地慢慢滑 ——
-      // 那一瞬它就停在**旧标题**旁边，看着像错位而不是动画。
-      // 远处的跳变要在两三帧内追上，附近的微调才慢慢逼近。
-      const dist = Math.abs(target - curY);
-      const rate = Math.min(0.45, 0.12 + dist / 700);
-      const k = snap || !Number.isFinite(curY) ? 1 : 1 - Math.pow(1 - rate, dt / 16.67);
+      const k = snap || !Number.isFinite(curY) ? 1 : 1 - Math.pow(1 - BALL_EASE, dt / 16.67);
       curY = snap || !Number.isFinite(curY) ? target : curY + (target - curY) * k;
 
       // 尺寸只在这一刻的层级真的变了时才写：改 width 会触发重排 + 重画光晕
