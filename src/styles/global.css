@@ -1,28 +1,39 @@
-/* 色系：黑场 + 白光 + 红光（参考图是一张暗调人像，画面里只有三个东西：
-   黑场，一道白亮光带，以及从边缘和瞳孔透出来的红。）
-   ⚠ 卡片是**白卡**：黑场上一块被照亮的板。卡上的几何纹理也只用黑 / 白 / 红三个颜色
-   （见下方「卡片几何纹理」）。文章详情页是一张**暖白纸**配红棕墨水（见 --paper / --ink-*）。 */
+/* ============================================================
+   主题色（唯一来源，改这里就够）
+   ------------------------------------------------------------
+   全部数值是从参考图那张人像里直接采样出来的，不是目测调的。
+   采样工具：PIL 取该区域像素的百分位。
+     白亮光带（x 163-304 / lum>235 的像素）：中位 #dfebf3，
+       p25 #deeaf2 · p75 #e0ecf3 —— 集中在 ±1，色相很稳，可以直接用
+     红光带主体 #982d1f，亮部 #bf3223，边缘溢光 #ed6148
+     暗部中位 #181914
+     皮肤中间调 #5b3729（和文章页 --ink-2 同一家族）
+   全站所有“白”都从 --white 派生，不再各写各的十六进制值。
+   ⚠ 这个白是**冷白偏蓝**（b 比 r 高 20），不是纸白。改的时候别往暖里调。
+   ============================================================ */
 :root {
-  --bg: #0b0b0c;          /* 黑场 */
-  --card: #f3f2ed;        /* 白卡：比纸冷半步，两种白不串 */
-  --card-fg: #141414;     /* 卡上的字 */
-  --card-fg-2: #4a4a46;
-  --card-fg-3: #85857f;
-  --card-line: #d6d5cd;   /* 卡上的发丝线 */
-  --fg: #f2f1ee;          /* 画布上的字（近白） */
-  --fg-2: #9a9a96;
-  --fg-3: #6a6a66;
-  --hairline: #26262a;
-  --accent: #ff2d2d;      /* 红光（唯一信号色） */
-  --accent-soft: rgba(255, 45, 45, 0.16);
-  --light: #ffffff;       /* 白光：画面里最亮的东西，只给「光」用 */
-  --ink-red: #e01f1f;     /* 卡上几何用的印刷红（和会发光的 --accent 分开） */
-  --ink-black: #141414;   /* 卡上几何用的黑 */
-  --paper: #faf7f2;       /* 文章页的白纸 */
-  --ink: #4a2f22;         /* 纸上的标题 */
-  --ink-2: #6b4a35;       /* 纸上的正文 */
-  --ink-3: #9c8069;       /* 纸上的次文 */
-  --paper-line: #e6dbcd;
+  --white: #dfebf3;        /* 主题白：采样自光带主体，冷白偏蓝 */
+
+  --bg: #0b0b0c;           /* 黑场 */
+  --card: var(--white);    /* 白卡 = 黑场上一块被照亮的板 */
+  --card-fg: #14181a;      /* 卡上的字（与冷白配对的冷黑） */
+  --card-fg-2: #4a545c;
+  --card-fg-3: #7d8890;
+  --card-line: #cdd6dc;    /* 卡上的发丝线（跟主题白的蓝调走） */
+  --fg: var(--white);      /* 画布上的字 = 主题白 */
+  --fg-2: #8f9ba3;
+  --fg-3: #646f76;
+  --hairline: #232a2f;
+  --accent: #f23828;       /* 红光（唯一可交互信号色，取红光带亮部到溢光之间） */
+  --accent-soft: rgba(242, 56, 40, 0.16);
+  --light: var(--white);   /* 白光：画面里最亮的东西，只给「光」用 */
+  --ink-red: #bf3223;      /* 卡上几何用的印刷红（采样自红光带亮部） */
+  --ink-black: #14181a;    /* 卡上几何用的黑 */
+  --paper: var(--white);   /* 文章页的白纸，和白卡同一个白 */
+  --ink: #4a2f22;          /* 纸上的标题（暖调，与冷白形成互补） */
+  --ink-2: #6b4a35;        /* 纸上的正文（采样 #5b3729 的邻近家族） */
+  --ink-3: #9c8069;        /* 纸上的次文 */
+  --paper-line: #dde5ea;
   --card-r: clamp(18px, 2.2vw, 30px); /* Apple 式大圆角 */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --measure: 42rem;
@@ -51,7 +62,7 @@ body {
   overflow-x: clip;
 }
 
-::selection { background: var(--accent); color: #fff; }
+::selection { background: var(--accent); color: var(--white); }
 
 a { color: inherit; text-decoration: none; }
 
@@ -163,9 +174,9 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
     linear-gradient(
       101deg,
       transparent 0 33%,
-      rgba(255, 255, 255, 0.04) 41%,
-      rgba(255, 255, 255, 0.15) 46%,
-      rgba(255, 255, 255, 0.04) 51%,
+      color-mix(in srgb, var(--white) 4%, transparent) 41%,
+      color-mix(in srgb, var(--white) 15%, transparent) 46%,
+      color-mix(in srgb, var(--white) 4%, transparent) 51%,
       transparent 59% 100%
     );
 }
@@ -235,7 +246,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   /* 白卡漏在黑场上的光晕：纯黑底上黑色投影是看不见的，靠这条光晕把卡“浮”起来 */
   box-shadow:
     0 30px 80px rgba(0, 0, 0, 0.72),
-    0 0 90px rgba(255, 255, 255, 0.055);
+    0 0 90px color-mix(in srgb, var(--white) 6%, transparent);
   pointer-events: none;
   z-index: -1;
   will-change: transform;
@@ -272,11 +283,11 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
     45deg,
     var(--ink-black) 0 11px,
     var(--ink-red) 11px 22px,
-    #ffffff 22px 33px
+    var(--white) 22px 33px
   );
   --geo-grid:
-    repeating-linear-gradient(to right, rgba(20, 20, 20, 0.16) 0 1px, transparent 1px 30px),
-    repeating-linear-gradient(to bottom, rgba(20, 20, 20, 0.16) 0 1px, transparent 1px 30px);
+    repeating-linear-gradient(to right, color-mix(in srgb, var(--ink-black) 16%, transparent) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(to bottom, color-mix(in srgb, var(--ink-black) 16%, transparent) 0 1px, transparent 1px 30px);
   /* 环距要相对卡片尺寸够大，圆心也只得在卡片附近，否则大半径的弧看着就是一组平行斜线 */
   --geo-rings: repeating-radial-gradient(
     circle at 88% 112%,
@@ -286,6 +297,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   --geo-dots: radial-gradient(var(--ink-black) 1.7px, transparent 1.8px);
   --geo-solid-red: linear-gradient(var(--ink-red), var(--ink-red));
   --geo-solid-black: linear-gradient(var(--ink-black), var(--ink-black));
+  --geo-solid-white: linear-gradient(var(--white), var(--white));
 }
 
 /* A 斜向警示条：卡片右下角的一块施工胶带。
@@ -347,15 +359,17 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 /* 图卡一：一条斜的黑带 + 底部渐暗（让标题角压得住） */
 .geo-img-band .imgbox::after {
   background:
-    linear-gradient(104deg, transparent 0 56%, rgba(20, 20, 20, 0.62) 56% 63%, transparent 63%),
-    linear-gradient(to top, rgba(20, 20, 20, 0.5), transparent 36%);
+    linear-gradient(104deg, transparent 0 56%, color-mix(in srgb, var(--ink-black) 62%, transparent) 56% 63%, transparent 63%),
+    linear-gradient(to top, color-mix(in srgb, var(--ink-black) 50%, transparent), transparent 36%);
 }
 /* 图卡二：左上角一块红角标 + 一白一竖两道套版十字线（印刷定位标记） */
 .geo-img-corner .imgbox::after {
   background:
-    linear-gradient(rgba(255, 255, 255, 0.75) 0 100%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.75) 0 100%),
-    linear-gradient(90deg, rgba(224, 31, 31, 0.92), rgba(224, 31, 31, 0.92));
+    linear-gradient(color-mix(in srgb, var(--white) 78%, transparent) 0 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--white) 78%, transparent) 0 100%),
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--ink-red) 92%, transparent),
+      color-mix(in srgb, var(--ink-red) 92%, transparent));
   background-size: 100% 1px, 1px 30%, 20% 11%;
   background-repeat: no-repeat;
   background-position: 0 52%, 82% 0, 0 0;
@@ -637,8 +651,8 @@ footer.site {
   color: var(--fg-2);
   transition: background 0.3s, color 0.3s, transform 0.3s var(--ease-out);
 }
-.dock a:hover { background: rgba(255, 255, 255, 0.1); color: var(--light); transform: translateY(-2px); }
-.dock a[aria-current="page"] { color: var(--light); background: rgba(255, 255, 255, 0.14); }
+.dock a:hover { background: color-mix(in srgb, var(--white) 10%, transparent); color: var(--light); transform: translateY(-2px); }
+.dock a[aria-current="page"] { color: var(--light); background: color-mix(in srgb, var(--white) 14%, transparent); }
 .dock svg { width: 1.05rem; height: 1.05rem; }
 
 /* ---------- ECG 心电进度条 ---------- */
