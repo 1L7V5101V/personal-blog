@@ -1,0 +1,38 @@
+---
+// 心电图阅读进度条：滚动越深，心跳波形画得越完整。
+// 路径在构建期生成：6 组 P-QRS-T 波形平铺整条线。
+const W = 1200, H = 40, BASE = 26, N = 6, SEG = W / N;
+let d = `M 0 ${BASE}`;
+for (let i = 0; i < N; i++) {
+  const x = i * SEG;
+  d += [
+    `L ${x + 28} ${BASE}`,                    // 平段
+    `Q ${x + 38} 20 ${x + 48} ${BASE}`,       // P 波（低丘）
+    `L ${x + 58} ${BASE}`,
+    `L ${x + 63} 33`,                         // Q（小下探）
+    `L ${x + 72} 5`,                          // R（主峰上冲）
+    `L ${x + 81} 33`,                         // S
+    `L ${x + 86} ${BASE}`,
+    `Q ${x + 105} 13 ${x + 124} ${BASE}`,     // T 波（宽丘）
+    `L ${x + SEG} ${BASE}`,
+  ].join(' ');
+}
+---
+<div class="ecg" aria-hidden="true">
+  <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+    <path class="bg" d={d}></path>
+    <path class="fg" d={d} pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1;"></path>
+  </svg>
+</div>
+
+<script>
+  const fg = document.querySelector<SVGPathElement>('.ecg .fg');
+  if (fg) {
+    window.__fx = window.__fx || [];
+    window.__fx.push(() => {
+      const max = document.documentElement.scrollHeight - innerHeight;
+      const p = max > 0 ? Math.min(1, Math.max(0, scrollY / max)) : 0;
+      fg.style.strokeDashoffset = String(1 - p);
+    });
+  }
+</script>

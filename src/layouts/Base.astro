@@ -1,0 +1,93 @@
+---
+import '../styles/global.css';
+import EcgProgress from '../components/EcgProgress.astro';
+import Dock from '../components/Dock.astro';
+
+const { title = 'il7510n', description = 'il7510n 的个人博客' } = Astro.props;
+const EMAIL = 'hi@il7510n.dpdns.org'; // TODO: 换成真实邮箱
+const path = Astro.url.pathname;
+---
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <nav class="topnav">
+      <a class="logo" href="/">il7510n</a>
+      <div class="links">
+        <a class="u" href="/blog/">文章</a>
+        <a class="u" href="/about/">关于</a>
+        <button class="u" data-copy={EMAIL} style="background:none;border:none;color:inherit;font:inherit;cursor:pointer">{EMAIL}</button>
+      </div>
+    </nav>
+
+    <EcgProgress />
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="site">
+      <span>© 2026 il7510n</span>
+      <span>滚动越深，心跳越完整</span>
+    </footer>
+
+    <Dock path={path} />
+
+    <script>
+      import Lenis from 'lenis';
+
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      // Lenis 惯性滚动（整站统一手感）
+      let lenis: Lenis | null = null;
+      if (!reduced) {
+        lenis = new Lenis({ lerp: 0.12 });
+      }
+
+      // 统一 rAF：各页面的滚动联动回调都挂到 __fx 上，这里统一驱动
+      (window as any).__fx = (window as any).__fx || [];
+      function raf(time: number) {
+        lenis?.raf(time);
+        for (const f of (window as any).__fx) f();
+        requestAnimationFrame(raf);
+      }
+      requestAnimationFrame(raf);
+
+      // 进场 stagger
+      document.body.classList.add('loaded');
+
+      // 滚动 reveal：进入视口一次性触发
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) {
+              e.target.classList.add('in');
+              io.unobserve(e.target);
+            }
+          }
+        },
+        { threshold: 0.15 }
+      );
+      document.querySelectorAll('[data-io]').forEach((el) => io.observe(el));
+
+      // click-to-copy（Rauno 式状态反馈）
+      document.querySelectorAll<HTMLElement>('[data-copy]').forEach((btn) => {
+        let timer: ReturnType<typeof setTimeout>;
+        btn.addEventListener('click', async () => {
+          const email = btn.getAttribute('data-copy') ?? '';
+          try { await navigator.clipboard.writeText(email); } catch {}
+          const orig = btn.textContent;
+          btn.textContent = '已复制 ✓';
+          clearTimeout(timer);
+          timer = setTimeout(() => (btn.textContent = orig), 1500);
+        });
+      });
+    </script>
+  </body>
+</html>

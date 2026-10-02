@@ -1,0 +1,25 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog');
+  return posts.map((p) => ({ params: { slug: p.id }, props: { post: p } }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const d = post.data.date;
+const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+---
+<Base title={`${post.data.title} · il7510n`} description={post.data.title} path={`/blog/${post.id}/`}>
+  <article class="article wrap prose">
+    <a class="backlink u" href="/blog/">← 全部文章</a>
+    <div class="meta">
+      <span>{fmt}</span>
+      <span>{post.data.tag}</span>
+    </div>
+    <h1>{post.data.title}</h1>
+    <Content />
+  </article>
+</Base>

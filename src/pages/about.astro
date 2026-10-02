@@ -1,0 +1,55 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="关于 · il7510n" path="/about/">
+  <section class="wrap about">
+    <h1 data-reveal style="--i:0">关于</h1>
+    <p class="intro" data-reveal style="--i:1">
+      工程师，偶尔写字。对交互手感、图形学和「把东西做久」有兴趣。
+      这个博客既是写字的地方，也是前端动效的练习场——你看到的所有效果都是手写的，没有用现成模板。
+    </p>
+
+    <div class="sec"><span class="label">时间线</span></div>
+    <div class="timeline">
+      <svg class="tl" viewBox="0 0 2 1000" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M 1 0 L 1 1000" pathLength="1" style="stroke-dasharray: 1; stroke-dashoffset: 1;"></path>
+      </svg>
+      <!-- TODO: 以下条目替换成你自己的经历 -->
+      <div class="tl-item" data-io>
+        <span class="y">2026</span>
+        <h3>这个博客上线</h3>
+        <p>Astro + 手写动效：横滑展区、曲线描绘、心电图进度条。</p>
+      </div>
+      <div class="tl-item" data-io>
+        <span class="y">2025</span>
+        <h3>NexusCompanion</h3>
+        <p>从零搭了一个多租户 AI 助手：webchat、存储切换、可观测性。</p>
+      </div>
+      <div class="tl-item" data-io>
+        <span class="y">2024</span>
+        <h3>开始折腾 GLSL</h3>
+        <p>Shadertoy 上手，喜欢上了波形、黑洞和一切会动的东西。</p>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .about { padding-top: 16vh; padding-bottom: 8rem; }
+  .about h1 { font-size: clamp(2.4rem, 6vw, 4rem); margin: 0; }
+  .intro { color: var(--fg-2); max-width: 36rem; }
+</style>
+
+<script>
+  const tl = document.querySelector<HTMLElement>('.timeline');
+  const line = tl?.querySelector<SVGPathElement>('path');
+
+  if (tl && line) {
+    (window as any).__fx = (window as any).__fx || [];
+    (window as any).__fx.push(() => {
+      const r = tl.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, (innerHeight * 0.75 - r.top) / r.height));
+      line.style.strokeDashoffset = String(1 - p);
+    });
+  }
+</script>
