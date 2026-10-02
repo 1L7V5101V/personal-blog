@@ -133,24 +133,24 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   stroke-width: 1.5;
 }
 
-/* 槽位：小标签在卡片上方（rauno 式）；所有主卡统一尺寸 */
+/* 槽位：卡外元素（标签/图注/提示）全部绝对定位，槽内只有卡，保证所有卡垂直中心对齐 */
 .slot {
   flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  position: relative;
   width: min(75vw, 76rem);
 }
 .slot .tag {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.55rem;
   font-size: 11px;
   letter-spacing: 0.02em;
   color: var(--fg-3);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-/* hero：白卡 + 阶梯缩进 + 黄圆（与其他卡同尺寸） */
+/* hero：白卡 + 阶梯缩进 + 黄圆（与其他卡同尺寸同中心） */
 .heroeslot { width: min(75vw, 76rem); }
 .hero-card {
   position: relative;
@@ -161,6 +161,14 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   background: var(--card);
   overflow: hidden;
   padding: clamp(2.5rem, 5vw, 4.5rem);
+}
+.hero-hint {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  padding-top: 0.9rem;
+  font-size: 0.85rem;
+  color: var(--fg-3);
 }
 .hero-card .dot { z-index: 0; }
 .hero-text { position: relative; z-index: 1; }
@@ -194,7 +202,18 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 
 /* 图片卡：大图 + 悬停虚化 + 幕帘 + 呼吸缩放 */
 .hcard { display: block; width: 100%; }
-.hcard figure { margin: 0; }
+.hcard figure { margin: 0; position: relative; }
+.hcard figcaption {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-top: 0.9rem;
+}
 .hcard .imgbox {
   aspect-ratio: 16 / 9;
   overflow: hidden;
@@ -277,14 +296,15 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   .poster:hover .pdot { transform: scale(1.14); }
 }
 
-/* 纯文字卡快进：--extra 由 JS 写入 */
-.slot[data-speed] { transform: translateX(calc(var(--extra, 0px) * -1)); }
-
-/* 列表面板：白卡 */
-.listpanel { width: min(48rem, 80vw); }
+/* 列表面板：与其他卡同尺寸的白卡 */
+.listpanel { width: min(75vw, 76rem); }
 .listpanel-card {
+  aspect-ratio: 16 / 9;
   background: var(--card);
-  padding: clamp(1.5rem, 3vw, 2.8rem);
+  padding: clamp(2rem, 4vw, 3.5rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* 宣言：直接写在画布上 */
@@ -484,7 +504,6 @@ footer.site {
   .track { transform: none !important; gap: 1.5rem; padding-inline: 1.5rem; }
   .slot, .heroeslot, .listpanel, .manifesto, .endpanel { width: 88vw; min-width: 88vw; }
   .slot, .panel { scroll-snap-align: center; }
-  .slot[data-speed] { transform: none !important; }
   .hline { display: none; }
 }
 
@@ -499,5 +518,4 @@ footer.site {
   .journey { height: auto !important; }
   .stage { position: static; height: auto; overflow: visible; }
   .track { transform: none !important; flex-wrap: wrap; }
-  .slot[data-speed] { transform: none !important; }
 }
