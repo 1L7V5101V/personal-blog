@@ -43,7 +43,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       <div class="track">
         <!-- 1 · Hero：白卡 + 阶梯缩进 + 黄圆 -->
         <section class="slot heroeslot">
-          <a class="hero-card" href="/blog/" data-pt="hero">
+          <a class="hero-card geo-hazard" href="/blog/" data-pt="hero">
             <span class="dot" style="width: 42%; right: -13%; top: 50%; transform: translateY(-50%);"></span>
             <div class="hero-text">
               <span class="lname"><span class="mask"><span data-reveal style="--i:0">il7510n</span></span></span>
@@ -58,7 +58,12 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         <!-- 2 · 图片卡（悬停虚化） -->
         {featured.map((p, i) => (
           <div class="slot">
-            <a class="hcard" href={`/blog/${p.id}/`} aria-label={p.data.title} data-pt={`card:${p.id}`}>
+            <a
+              class={`hcard ${i === 0 ? 'geo-img-band' : 'geo-img-corner'}`}
+              href={`/blog/${p.id}/`}
+              aria-label={p.data.title}
+              data-pt={`card:${p.id}`}
+            >
               <figure>
                 <div class="imgbox">
                   {p.data.cover && <img src={p.data.cover} alt="" loading="lazy" />}
@@ -75,21 +80,21 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
 
         <!-- 3 · 字体海报卡（巨型裁切文字 + 色块圆；过中心后爆发加速） -->
         <div class="slot pslot">
-          <a class="poster" href="/blog/why-blog-again/" data-pt="poster:why-blog-again">
+          <a class="poster geo-grid" href="/blog/why-blog-again/" data-pt="poster:why-blog-again">
             <span class="dot pdot" style="width: 34%; right: 5%; top: 10%;"></span>
             <span class="pword">写</span>
             <span class="psub">收藏夹越来越厚，写出来的越来越少。</span>
           </a>
         </div>
         <div class="slot pslot">
-          <a class="poster" href="/blog/deconstruct-lusion-scroll/" data-pt="poster:deconstruct-lusion-scroll">
-            <span class="dot dot-orange pdot" style="width: 34%; right: 5%; top: 10%;"></span>
+          <a class="poster geo-rings" href="/blog/deconstruct-lusion-scroll/" data-pt="poster:deconstruct-lusion-scroll">
+            <span class="dot dot-ink pdot" style="width: 34%; right: 5%; top: 10%;"></span>
             <span class="pword">拆</span>
             <span class="psub">幕帘、缩放、描线——全是基础功。</span>
           </a>
         </div>
         <div class="slot pslot">
-          <a class="poster" href="/blog/lenis-smooth-scroll/" data-pt="poster:lenis-smooth-scroll">
+          <a class="poster geo-split" href="/blog/lenis-smooth-scroll/" data-pt="poster:lenis-smooth-scroll">
             <span class="dot pdot" style="width: 30%; right: 5%; top: 12%;"></span>
             <span class="pword">100%</span>
             <span class="psub">动效全手写 · 零现成模板</span>
@@ -98,7 +103,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
 
         <!-- 4 · 全部文章：白卡 -->
         <section class="slot listpanel">
-          <div class="listpanel-card">
+          <div class="listpanel-card geo-frame">
             <div class="list">
               {posts.map((p, i) => (
                 <a class="row" href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>

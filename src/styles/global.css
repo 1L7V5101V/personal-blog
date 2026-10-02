@@ -1,16 +1,23 @@
-/* 色系：黑底 + 白光 + 红光（参考图是一张暗调人像，画面里只有三个东西：
+/* 色系：黑场 + 白光 + 红光（参考图是一张暗调人像，画面里只有三个东西：
    黑场，一道白亮光带，以及从边缘和瞳孔透出来的红。）
-   文章详情页例外，是一张白纸配红棕墨水（见下方 --paper / --ink-*）。 */
+   ⚠ 卡片是**白卡**：黑场上一块被照亮的板。卡上的几何纹理也只用黑 / 白 / 红三个颜色
+   （见下方「卡片几何纹理」）。文章详情页是一张**暖白纸**配红棕墨水（见 --paper / --ink-*）。 */
 :root {
   --bg: #0b0b0c;          /* 黑场 */
-  --card: #141416;        /* 深一档的卡，靠发丝线分层而不是投影 */
-  --fg: #f2f1ee;          /* 近白：画面里的正文色 */
+  --card: #f3f2ed;        /* 白卡：比纸冷半步，两种白不串 */
+  --card-fg: #141414;     /* 卡上的字 */
+  --card-fg-2: #4a4a46;
+  --card-fg-3: #85857f;
+  --card-line: #d6d5cd;   /* 卡上的发丝线 */
+  --fg: #f2f1ee;          /* 画布上的字（近白） */
   --fg-2: #9a9a96;
   --fg-3: #6a6a66;
   --hairline: #26262a;
   --accent: #ff2d2d;      /* 红光（唯一信号色） */
   --accent-soft: rgba(255, 45, 45, 0.16);
   --light: #ffffff;       /* 白光：画面里最亮的东西，只给「光」用 */
+  --ink-red: #e01f1f;     /* 卡上几何用的印刷红（和会发光的 --accent 分开） */
+  --ink-black: #141414;   /* 卡上几何用的黑 */
   --paper: #faf7f2;       /* 文章页的白纸 */
   --ink: #4a2f22;         /* 纸上的标题 */
   --ink-2: #6b4a35;       /* 纸上的正文 */
@@ -59,9 +66,11 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.1rem 1.5rem;
   z-index: 40;
-  background: linear-gradient(to bottom, rgba(11,11,12,.92), rgba(11,11,12,0));
+  /* 白卡会在顶栏底下露出来，渐变得收得快一点：只要还看得住导航文字就行，
+     下面 40px 要赶紧透出卡面，否则卡片顶部的几何会被压成一道灰边。 */
+  padding: 0.9rem 1.5rem 1rem;
+  background: linear-gradient(to bottom, rgba(11,11,12,.92) 0%, rgba(11,11,12,.55) 46%, rgba(11,11,12,0) 100%);
   pointer-events: none;
 }
 .topnav > * { pointer-events: auto; }
@@ -223,9 +232,10 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   inset: 0;
   border-radius: var(--card-r);
   corner-shape: superellipse(2);
-  /* 黑场上那套淡投影（rgba(20,20,20,.07)）等于不存在，换成真的黑投影 +
-     一圈 1px 发丝线把卡面从背景里分出来。投影仍旧只在槽位上，原因见上。 */
-  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.62), 0 2px 10px rgba(0, 0, 0, 0.4);
+  /* 白卡漏在黑场上的光晕：纯黑底上黑色投影是看不见的，靠这条光晕把卡“浮”起来 */
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.72),
+    0 0 90px rgba(255, 255, 255, 0.055);
   pointer-events: none;
   z-index: -1;
   will-change: transform;
@@ -248,7 +258,110 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   white-space: nowrap;
 }
 
-/* hero：深色卡 + 阶梯缩进 + 白色圆（与其他卡同尺寸同中心） */
+/* ---------- 卡片几何纹理 ----------
+   全站只有黑 / 白 / 红三个颜色，几何全部用 background-image 的渐变叠层画出来：
+   不用图片、不用 SVG、不用伪元素。
+   ⚠ 必须写在卡片**自身的 background-image** 上，别拆成 ::before 遮罩：
+   弯牌切片是 card.cloneNode(true)，卡片自己的 background 会跟着克隆 11 份，
+   而槽位的两个伪元素已经被投影（::before）和其它装饰占掉了。
+   每张卡挂一个 variant 类，一条轨道走下来像一套印刷样张。 */
+
+/* 原料（可组合的几何母题） */
+:root {
+  --geo-stripes: repeating-linear-gradient(
+    45deg,
+    var(--ink-black) 0 11px,
+    var(--ink-red) 11px 22px,
+    #ffffff 22px 33px
+  );
+  --geo-grid:
+    repeating-linear-gradient(to right, rgba(20, 20, 20, 0.16) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(to bottom, rgba(20, 20, 20, 0.16) 0 1px, transparent 1px 30px);
+  /* 环距要相对卡片尺寸够大，圆心也只得在卡片附近，否则大半径的弧看着就是一组平行斜线 */
+  --geo-rings: repeating-radial-gradient(
+    circle at 88% 112%,
+    var(--ink-black) 0 4px,
+    transparent 4px 74px
+  );
+  --geo-dots: radial-gradient(var(--ink-black) 1.7px, transparent 1.8px);
+  --geo-solid-red: linear-gradient(var(--ink-red), var(--ink-red));
+  --geo-solid-black: linear-gradient(var(--ink-black), var(--ink-black));
+}
+
+/* A 斜向警示条：卡片右下角的一块施工胶带。
+   ⚠ 别放在顶部：卡片是 sticky 全屏高的，顶上 50px 被顶栏的暗渐变遮住，几何会被吃掉。 */
+.geo-hazard {
+  background-image: var(--geo-stripes);
+  background-size: 42% 27%;
+  background-repeat: no-repeat;
+  background-position: 100% 100%;
+}
+
+/* B 坐标网格 + 一根实心红竖条（工程图纸） */
+.geo-grid {
+  background-image: var(--geo-solid-red), var(--geo-grid);
+  background-size: 4.5% 100%, auto;
+  background-repeat: no-repeat, repeat;
+  background-position: 69% 0, 0 0;
+}
+
+/* C 同心圆环：圆心故意跑到卡片右下角外，只留一段弧（回转印刷的错版感） */
+.geo-rings {
+  background-image: var(--geo-rings);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+}
+
+/* D 斜切色块 + 半调网点。
+   ⚠ 这张卡上有巨大的黑字和深灰副标题，所以几何层只能是**细的**：
+   大块实色会把黑字吃掉、把深灰副标题压在深底上。两道斜切线各占 1.4% 宽，
+   点阵是稀疏小点（26px 间距 / 1.7px 半径），压在字底下也不影响读。 */
+.geo-split {
+  background-image:
+    linear-gradient(116deg, transparent 0 30%, var(--ink-red) 30% 31.4%, transparent 31.4% 72%, var(--ink-black) 72% 73.4%, transparent 73.4%),
+    var(--geo-dots);
+  background-size: 100% 100%, 26px 26px;
+  background-repeat: no-repeat, repeat;
+  background-position: 0 0, 0 0;
+}
+
+/* E 边框式：上下两条实线（列表卡用，文字多，要最安静） */
+.geo-frame {
+  background-image: var(--geo-solid-black), var(--geo-solid-red);
+  background-size: 100% 5px, 100% 3px;
+  background-repeat: no-repeat;
+  background-position: 0 0, 0 100%;
+}
+
+.hero-card, .poster, .listpanel-card { background-color: var(--card); }
+
+/* 图片卡：几何压在照片上（::after 会在克隆片里一起重建，弯牌时不丢） */
+.hcard .imgbox::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+/* 图卡一：一条斜的黑带 + 底部渐暗（让标题角压得住） */
+.geo-img-band .imgbox::after {
+  background:
+    linear-gradient(104deg, transparent 0 56%, rgba(20, 20, 20, 0.62) 56% 63%, transparent 63%),
+    linear-gradient(to top, rgba(20, 20, 20, 0.5), transparent 36%);
+}
+/* 图卡二：左上角一块红角标 + 一白一竖两道套版十字线（印刷定位标记） */
+.geo-img-corner .imgbox::after {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.75) 0 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.75) 0 100%),
+    linear-gradient(90deg, rgba(224, 31, 31, 0.92), rgba(224, 31, 31, 0.92));
+  background-size: 100% 1px, 1px 30%, 20% 11%;
+  background-repeat: no-repeat;
+  background-position: 0 52%, 82% 0, 0 0;
+}
+
+/* hero：白卡 + 阶梯缩进 + 红圆（与其他卡同尺寸同中心） */
 .heroeslot { width: min(75vw, 76rem); }
 /* 弯牌期间卡片本体必须关掉 transform 过渡。
    本体就是切片里的「中条」：克隆片是 transition:none 立即到位，它若还挂着 0.45s 过渡，
@@ -268,7 +381,8 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   flex-direction: column;
   justify-content: center;
   aspect-ratio: 16 / 9;
-  background: var(--card);
+  /* 底色由上面的 .hero-card/.poster/.listpanel-card { background-color } 给，
+     这里绝不能再写 background: 简写 —— 简写会把 geo-* 变体的 background-image 清掉。 */
   overflow: hidden;
   padding: clamp(2.5rem, 5vw, 4.5rem);
 }
@@ -289,6 +403,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   letter-spacing: -0.035em;
   line-height: 1.05;
   margin-bottom: 0.35em;
+  color: var(--card-fg);   /* 卡是白的，字必须翻回黑 */
 }
 .hero-text .line {
   display: block;
@@ -296,20 +411,21 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   font-weight: 550;
   letter-spacing: -0.02em;
   line-height: 1.35;
+  color: var(--card-fg);
 }
 .hero-text .s2 { margin-left: clamp(1.5rem, 4vw, 4rem); }
 .hero-text .s3 { margin-left: clamp(3rem, 8vw, 8rem); }
 .hero-hint { font-size: 0.85rem; color: var(--fg-3); }
 
-/* 海报色块圆：白 / 红两个强调色轮着上（参考图里那道白亮光带和那根红条是同一个系统的东西）。
-   底色从海报黄/橙换成白/红，黑场上黄橙色会发土。 */
+/* 海报色块圆：白卡上不能再用白光（看不见了），改用两个印刷色。
+   白光 --light 仍然只给「光」用（.lightbar 的光带、.hline）。 */
 .dot {
   position: absolute;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: var(--light);
+  background: var(--ink-red);
 }
-.dot-orange { background: var(--accent); }
+.dot-ink { background: var(--ink-black); }
 
 /* 图片卡：大图 + 悬停虚化 + 幕帘 + 呼吸缩放（图注/标题/日期已去掉，卡下不再有任何文字） */
 .hcard { display: block; width: 100%; }
@@ -318,7 +434,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   position: relative;   /* 视差画布 .fdpt 绝对定位在图片上方 */
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: var(--card);
+  background-color: var(--card);   /* 图片没加载出来时的底 */
 }
 /* 图片卡悬停：① 散焦 → 一次性对焦　② 鼠标视差（深度图 + WebGL 逐像素位移，见 index.astro）
    ⚠ 悬停状态挂在 .slot 上（is-hovering），不用 :hover —— 卡片弯成 11 条时，克隆片是
@@ -389,7 +505,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  background: var(--card);
+  /* 同上：不写 background 简写，否则 geo-* 的 background-image 被清空 */
   overflow: hidden;
 }
 .poster .pword {
@@ -403,10 +519,10 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   letter-spacing: -0.05em;
   line-height: 0.82;
   white-space: nowrap;
-  /* 白字 + 一道红错位边：两个强调色同时上。--pan 仍然是 CSS 变量（JS 只写 .pslot），
+  /* 黑字 + 一道红错位边：两个颜色同时上。--pan 仍然是 CSS 变量（JS 只写 .pslot），
      11 条切片才永远同步 —— 别改成 inline transform。 */
-  color: var(--light);
-  text-shadow: 5px 5px 0 var(--accent);
+  color: var(--card-fg);
+  text-shadow: 5px 5px 0 var(--ink-red);
 }
 .poster .pdot {
   width: 48%;
@@ -418,10 +534,10 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .poster .psub {
   position: absolute;
   left: clamp(1.5rem, 3vw, 2.5rem);
-  top: clamp(1.2rem, 2.5vw, 2rem);
+  top: clamp(2.8rem, 5.4vw, 4.4rem);   /* 躲开顶栏的暗渐变，否则深灰字压深灰底读不出来 */
   z-index: 1;
   font-size: 0.9rem;
-  color: var(--fg-2);
+  color: var(--card-fg-2);
 }
 @media (hover: hover) {
   .poster:hover .pdot { transform: scale(1.14); }
@@ -431,7 +547,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .listpanel { width: min(75vw, 76rem); }
 .listpanel-card {
   aspect-ratio: 16 / 9;
-  background: var(--card);
   padding: clamp(2rem, 4vw, 3.5rem);
   display: flex;
   flex-direction: column;
@@ -484,6 +599,10 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .row .t { font-weight: 600; font-size: 1.08rem; }
 .row .m { font-size: 0.85rem; color: var(--fg-3); white-space: nowrap; }
 .row:hover .t { color: var(--accent); }
+/* 列表卡在白底上，所以行内的字色/发丝线要翻回卡上那套（页面上的 .row 仍是黑底近白） */
+.listpanel-card .row { color: var(--card-fg); border-bottom-color: var(--card-line); }
+.listpanel-card .row .m { color: var(--card-fg-3); }
+.listpanel-card .row:hover .t { color: var(--ink-red); }
 
 /* ---------- 页脚 ---------- */
 footer.site {
@@ -646,7 +765,7 @@ footer.site {
 }
 .pt-paper {
   position: absolute;
-  background: var(--card);
+  background-color: var(--card);   /* 里面是卡的克隆（带几何层），这只是背景兜底 */
   border-radius: var(--card-r);
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
@@ -711,6 +830,17 @@ html.pt-arrive .article {
   .slot, .panel { scroll-snap-align: center; }
   .hline { display: none; }
   #fluid { display: none; }
+  /* 小屏卡片窄，色块圆会压到标题上。
+     ⚠ 用 `translate` / `scale` 独立属性，**不要用 `transform`**：
+     这些 span 的 width / right / top / transform 都是行内样式，内联的 transform
+     会直接压过样式表里的 transform。独立属性是和 transform 分开计算的，不冲突。
+     transform-origin 选 center right：缩小时右边不动，只往外长。 */
+  .hero-card .dot,
+  .poster .pdot {
+    translate: -18% 0;
+    scale: 0.52;
+    transform-origin: center right;
+  }
 }
 
 /* ---------- reduced motion ---------- */
