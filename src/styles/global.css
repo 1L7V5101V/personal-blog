@@ -81,12 +81,15 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   top: 0;
   left: 0;
   right: 0;
-  height: 104px;
+  height: 80px;
   z-index: 39;              /* 在 topnav(40) 之下，内容之上 */
   pointer-events: none;
   background: var(--bg);
-  -webkit-backdrop-filter: blur(7px) saturate(1.08);
-  backdrop-filter: blur(7px) saturate(1.08);
+  /* ⚠ backdrop-filter 每帧要对背板重新模糊，代价 = 面积 × 模糊半径。
+     高度和半径都是按这个乘积定的；`saturate()` 是额外一趟颜色变换，
+     收益太小，去掉。要加效果先想清楚这里每帧多花多少。 */
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
   /* 遮罩让背景和模糊一起渐隐：顶部实，往下化掉 */
   -webkit-mask-image: linear-gradient(to bottom, #000 0 26%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 0 26%, transparent 100%);
@@ -718,7 +721,13 @@ footer.site {
   background: var(--paper);
   color: var(--ink-2);
   border-radius: var(--card-r);
-  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.7);
+  /* ⚠ 模糊半径别给大。这份 12k px 高的笔记上，原来的 90px 模糊阴影要栅格化
+     一块 (832+180)×(12193+180) 的区域，而底部那道阴影在视口下方一万二千像素处，
+     根本看不见 —— 每帧都在算一个永远看不到的东西。收紧到 44px 即可：
+     黑底上的白纸本来就分得开。 */
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--paper-line) 70%, transparent),
+    0 18px 44px rgba(0, 0, 0, 0.6);
   padding: clamp(2rem, 5.5vw, 5rem);
 }
 .article .meta {
@@ -864,17 +873,29 @@ footer.site {
   transform: translate3d(0, var(--rg-off, 0px), 0);
   will-change: transform;   /* 只有刻度条逐帧动；窗口和光球都不动 */
 }
+/* 正文刻度：全部等长（RG_MIN）、等距（RG_GAP），所以用一个 repeating-linear-gradient
+   一次画完 —— 而不是每行塞一个 <i>。那份 12k px 的笔记有 369 条刻度，
+   其中 350 条是正文，用 DOM 画就是白挂 350 个绝对定位元素。
+   标题刻度才需要逐条定位（长度各不相同），留在 .readguide__tick 里。 */
+.readguide__body {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--rg-min, 22px);
+  height: 100%;
+  opacity: 0.5;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--fg-3) 0 1px,
+    transparent 1px var(--rg-gap, 8px)
+  );
+}
 .readguide__tick {
   position: absolute;
   left: 0;
   display: block;
   height: 1px;
-  background: var(--fg-3);
-  opacity: 0.5;
-}
-.readguide__tick.is-head {
   background: var(--fg-2);
-  opacity: 1;
 }
 
 /* 光球：正文里，落在当前标题的**左侧边距**（标题文字的左边），不在标尺上。

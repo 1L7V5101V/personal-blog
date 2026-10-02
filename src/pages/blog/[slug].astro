@@ -31,7 +31,7 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
   <div class="readguide" aria-hidden="true">
     <div class="readguide__ruler">
       <!-- 刻度条在内层：它逐帧改 transform，外层窗口只负责裁切 + 两端渐隐 -->
-      <div class="readguide__track"></div>
+      <div class="readguide__track"><div class="readguide__body"></div></div>
     </div>
     <div class="readguide__line"></div>
     <!-- 光球在**正文里**，不在标尺上：它落在当前标题的左侧边距里，
@@ -56,6 +56,7 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
     const paper = prose;
     const ruler = guide.querySelector<HTMLElement>('.readguide__ruler')!;
     const track = guide.querySelector<HTMLElement>('.readguide__track')!;
+    const bodyStrip = guide.querySelector<HTMLElement>('.readguide__body')!;
     const ball = guide.querySelector<HTMLElement>('.readguide__ball')!;
 
     const RG_MAX = 64;          // 刻度最长边（最大的标题），固定
@@ -156,16 +157,21 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       winH = Math.round(Math.min(innerHeight * AVAIL, contentH + 32));
       ruler.style.height = winH + 'px';
       track.style.height = contentH + 'px';
+      track.style.setProperty('--rg-gap', RG_GAP + 'px');
+      bodyStrip.style.width = RG_MIN + 'px';
 
+      // 只给**标题**刻度建 DOM：正文刻度是一条 repeating-linear-gradient（见 CSS）。
+      // 369 条刻度里 350 条是正文，用 DOM 画就是白挂 350 个绝对定位元素。
       const frag = document.createDocumentFragment();
-      ticks.forEach((lv, i) => {
+      ticks.forEach(function (lv, i) {
+        if (lv === null) return;
         const el = document.createElement('i');
-        el.className = lv === null ? 'readguide__tick' : 'readguide__tick is-head';
+        el.className = 'readguide__tick';
         el.style.top = i * RG_GAP + 'px';
         el.style.width = tickLen(lv).toFixed(2) + 'px';
         frag.appendChild(el);
       });
-      track.replaceChildren(frag);
+      track.replaceChildren(bodyStrip, frag);
 
       // 光球的横向位置：纸面左内边距里，标题文字的左边
       const padX = parseFloat(getComputedStyle(paper).paddingLeft) || 32;
