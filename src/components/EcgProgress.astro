@@ -1,22 +1,49 @@
 ---
 // 心电图阅读进度条：滚动越深，心跳波形画得越完整。
-// 路径在构建期生成：6 组 P-QRS-T 波形平铺整条线。
-const W = 1200, H = 40, BASE = 26, N = 6, SEG = W / N;
-let d = `M 0 ${BASE}`;
-for (let i = 0; i < N; i++) {
-  const x = i * SEG;
-  d += [
-    `L ${x + 28} ${BASE}`,                    // 平段
-    `Q ${x + 38} 20 ${x + 48} ${BASE}`,       // P 波（低丘）
-    `L ${x + 58} ${BASE}`,
-    `L ${x + 63} 33`,                         // Q（小下探）
-    `L ${x + 72} 5`,                          // R（主峰上冲）
-    `L ${x + 81} 33`,                         // S
-    `L ${x + 86} ${BASE}`,
-    `Q ${x + 105} 13 ${x + 124} ${BASE}`,     // T 波（宽丘）
-    `L ${x + SEG} ${BASE}`,
+// 路径在构建期生成，一整条线上平铺 N 个完整心动周期。
+//
+// 形态按真实心电图走（参考图那种）：每个周期 = 平段 → P 波（低丘）→ PR 段
+// → Q 小下探 → R 主峰急冲 → S 探底 → 回到基线 → T 波（宽丘）→ 平段。
+// R 用折线不用曲线（真实 QRS 就是尖的），P / T 用二次贝塞尔。
+//
+// ⚠ viewBox 是固定的 1200~1600 单位宽，而 <svg> 要铺满视口，
+// 所以 preserveAspectRatio="none" 带来的横向拉伸是躲不掉的（1440 宽的屏约 1.2×）。
+// 唯一能缓解的办法是**把周期数堆密**：拍得越密，眼睛读到的是「节律」而不是「比例」，
+// 拉伸就看不出来了。所以 N 别调小。纵向靠 .ecg 的 height 控制幅度（见 global.css）。
+const W = 1600, H = 40, BASE = 26, N = 16, SEG = W / N;
+
+// 基线抖动：真机打印出来的心电图基线从不完全平。
+// 用固定种子的线性同余，不用 Math.random —— 构建产物必须可复现。
+let seed = 20260920;
+const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
+const f = (n: number) => n.toFixed(2);
+const j = (amp: number) => rnd() * 2 * amp;   // 抖动量（模块级：beat() 和起止段都要用）
+
+// 一整个心动周期。x = 该周期的起点
+const beat = (x: number) => {
+  const at = (k: number) => x + SEG * k;
+  return [
+    // 基线 + P 波前的那段平路，带轻微抖动
+    `L ${f(at(0.12))} ${f(BASE + j(0.7))}`,
+    `L ${f(at(0.30))} ${f(BASE + j(0.5))}`,
+    // P 波：宽而低的丘
+    `Q ${f(at(0.39))} ${f(BASE - 3.6)} ${f(at(0.48))} ${f(BASE + j(0.5))}`,
+    // PR 段
+    `L ${f(at(0.58))} ${f(BASE + j(0.4))}`,
+    // QRS：全是折线。Q 下探 → R 急冲 → S 探底 → 回到基线
+    `L ${f(at(0.605))} ${f(BASE + 2.6 + j(0.8))}`,
+    `L ${f(at(0.67))} ${f(BASE - 19 + j(1.4))}`,
+    `L ${f(at(0.73))} ${f(BASE + 7 + j(1.0))}`,
+    `L ${f(at(0.79))} ${f(BASE + j(0.5))}`,
+    // T 波：比 P 宽、比 P 高，是舒张期的大丘
+    `Q ${f(at(0.885))} ${f(BASE - 6.5)} ${f(at(1.0))} ${f(BASE + j(0.4))}`,
   ].join(' ');
-}
+};
+
+let d = `M 0 ${f(BASE + j(0.7))}`;
+for (let i = 0; i < N; i++) d += ` ${beat(i * SEG)}`;
+// 末尾补一小段平路，收尾不至于悬在半空
+d += ` L ${W} ${f(BASE)}`;
 ---
 <div class="ecg" aria-hidden="true">
   <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">

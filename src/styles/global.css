@@ -526,14 +526,19 @@ footer.site {
 .ecg {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: 26px;
+  /* 32px 不是随手取的：viewBox 高 40，preserveAspectRatio="none" 把纵向也缩放了 0.8，
+     R 峰（基线上 19 单位）落到屏幕上约 15px，幅度刚好读得出来又不会顶到屏幕边缘。
+     改这个值记得回头看一眼 R 峰有没有被切。 */
+  height: 32px;
   z-index: 50;
   pointer-events: none;
 }
 .ecg svg { width: 100%; height: 100%; display: block; }
 .ecg path {
   fill: none;
-  stroke-width: 1.5;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
 .ecg .bg { stroke: var(--accent); opacity: 0.16; }
