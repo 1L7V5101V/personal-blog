@@ -175,12 +175,15 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       const x = Math.max(0, Math.min(1, t));
       return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
     };
-    // 牌堆位形：随机角度/偏移（每次加载洗一次牌）；hero 在最上
+    // 牌堆位形：随机角度/偏移（每次加载洗一次牌）；顶牌 hero 不旋转、正中
     const pilePose = fanEls.map(() => ({
       r: Math.random() * 14 - 7,     // -7° ~ 7°
       x: Math.random() * 64 - 32,    // ±32px
       y: Math.random() * 40 - 20,    // ±20px
     }));
+    pilePose[0] = { r: 0, x: 0, y: 0 };
+    // 瀑布落牌：牌按次序从堆里逐张落下归位（0=同时，1=完全串行）
+    const STAGGER = 0.55;
 
     (window as any).__fx = (window as any).__fx || [];
     (window as any).__fx.push(() => {
@@ -211,6 +214,9 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       const cx = innerWidth / 2, cy = innerHeight / 2;
 
       fanEls.forEach((el, i) => {
+        // 瀑布落牌：顶牌先落，后面逐张跟着（级联时序）
+        const t0 = (i / (N - 1)) * STAGGER;
+        const flyPe = easeInOut((flyRaw - t0) / (1 - STAGGER));
         if (flyRaw >= 0.999) {
           // 完全铺平后回归中性 transform（只留滚轴斜切）
           if (el.style.transformOrigin) { el.style.transformOrigin = ''; el.style.zIndex = ''; }
