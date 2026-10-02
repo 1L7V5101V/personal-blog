@@ -70,6 +70,28 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
 
 .wrap { width: min(var(--measure), calc(100vw - 3rem)); margin-inline: auto; }
 
+/* ---------- 顶部遮罩 ----------
+   最上面实底，往下渐变透明，带模糊。
+   替代原先 topnav 自己那条渐变：两条叠起来会把白卡顶部压成一道死灰边。
+   ⚠ 高度只给 76px：backdrop-filter 每帧要对背板重新模糊，
+   铺满一屏就是每帧重算全屏栅格 —— 项目里 dock 的 backdrop-filter 就是
+   因为这个删掉的。这条只覆盖顶部一条窄带，成本可控。 */
+.topveil {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 104px;
+  z-index: 39;              /* 在 topnav(40) 之下，内容之上 */
+  pointer-events: none;
+  background: var(--bg);
+  -webkit-backdrop-filter: blur(7px) saturate(1.08);
+  backdrop-filter: blur(7px) saturate(1.08);
+  /* 遮罩让背景和模糊一起渐隐：顶部实，往下化掉 */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0 26%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0 26%, transparent 100%);
+}
+
 /* ---------- 顶部导航 ---------- */
 .topnav {
   position: fixed;
@@ -78,11 +100,10 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   align-items: center;
   justify-content: space-between;
   z-index: 40;
-  /* 白卡会在顶栏底下露出来，渐变得收得快一点：只要还看得住导航文字就行，
-     下面 40px 要赶紧透出卡面，否则卡片顶部的几何会被压成一道灰边。 */
-  padding: 0.9rem 1.5rem 1rem;
-  background: linear-gradient(to bottom, rgba(11,11,12,.92) 0%, rgba(11,11,12,.55) 46%, rgba(11,11,12,0) 100%);
-  pointer-events: none;
+  /* 上内边距要把导航文字顶到 ECG 下面：ECG 占 0~46px，
+     导航文字要是还贴在 20~34px 就会被心电图划一道穿过去。 */
+  padding: 3.3rem 1.5rem 1rem;
+  pointer-events: none;     /* 底色交给 .topveil，nav 自身不再叠渐变 */
 }
 .topnav > * { pointer-events: auto; }
 .topnav .logo { font-weight: 650; letter-spacing: -0.02em; }
@@ -656,20 +677,20 @@ footer.site {
 .dock svg { width: 1.05rem; height: 1.05rem; }
 
 /* ---------- ECG 心电进度条 ---------- */
+/* ---------- ECG 心电进度条 ----------
+   46px 高不是随手取的：viewBox 高 40，preserveAspectRatio="none" 会把纵向也缩放，
+   高度给足 R 峰才有幅度可读。改这个值记得回头看一眼 R 峰有没有被切到。 */
 .ecg {
   position: fixed;
   top: 0; left: 0; right: 0;
-  /* 32px 不是随手取的：viewBox 高 40，preserveAspectRatio="none" 把纵向也缩放了 0.8，
-     R 峰（基线上 19 单位）落到屏幕上约 15px，幅度刚好读得出来又不会顶到屏幕边缘。
-     改这个值记得回头看一眼 R 峰有没有被切。 */
-  height: 32px;
+  height: 46px;
   z-index: 50;
   pointer-events: none;
 }
 .ecg svg { width: 100%; height: 100%; display: block; }
 .ecg path {
   fill: none;
-  stroke-width: 1.6;
+  stroke-width: 2.2;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
@@ -808,14 +829,30 @@ footer.site {
   );
 }
 
-/* 标尺本体：高度 = 刻度数 × 间距，由 JS 写 */
+/* 标尺：外层是「窗口」（固定高度 + 两端渐隐遮罩），内层是刻度条。
+   刻度条比窗口长的时候，它跟着阅读位置滚动 —— 中心横线当前指着的那一行正文，
+   永远对应刻度条上落在横线高度的那条刻度。 */
 .readguide__ruler {
   position: absolute;
   left: var(--rg-x);
   top: 50%;
-  width: 64px;             /* 由 JS 覆写成算出来的 --rg-max 像素值 */
-  height: 200px;
+  width: 64px;             /* 由 JS 覆写成算出来的最长边像素值 */
+  height: 200px;           /* 由 JS 覆写成窗口高度 */
   transform: translateY(-50%);
+  overflow: hidden;
+  /* 两端渐隐：上下各化掉 16%，让「这一段是文章开头/结尾」有暗示，
+     刻度从遮罩底下进出的过程也不突兀。 */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 16%, #000 84%, transparent);
+}
+.readguide__track {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 200px;           /* 由 JS 覆写成刻度条总高 */
+  transform: translate3d(0, var(--rg-off, 0px), 0);
+  will-change: transform;   /* 只有刻度条逐帧动；窗口和光球都不动 */
 }
 .readguide__tick {
   position: absolute;
@@ -823,7 +860,7 @@ footer.site {
   display: block;
   height: 1px;
   background: var(--fg-3);
-  opacity: 0.55;
+  opacity: 0.5;
 }
 .readguide__tick.is-head {
   background: var(--fg-2);
@@ -831,24 +868,23 @@ footer.site {
 }
 
 /* 光球：正文里，落在当前标题的**左侧边距**（标题文字的左边），不在标尺上。
-   形状是竖长的椭圆（不是正圆）—— 参考图里就是一颗竖瞳。
-   宽高都随标题层级递减，靠 --rg-ball-w / --rg-ball-h 写。
+   正圆，直径随标题层级递减（--rg-ball）。
    定位：left 由 JS 按纸面位置算好写进来（固定定位，相对视口）；
    top 用 transform 的 --rg-y 推，逐帧只改 transform，不触发布局。 */
 .readguide__ball {
   position: fixed;
   left: 0;
   top: 0;
-  width: var(--rg-ball-w, 13px);
-  height: var(--rg-ball-h, 58px);
+  width: var(--rg-ball, 16px);
+  height: var(--rg-ball, 16px);
   border-radius: 50%;
   background: var(--ink-red);
   transform: translate3d(0, var(--rg-y, 0px), 0) translate(-50%, -50%);
   will-change: transform;
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--ink-red) 45%, transparent),
-    0 0 22px 3px color-mix(in srgb, var(--ink-red) 50%, transparent),
-    0 0 60px 14px color-mix(in srgb, var(--ink-red) 22%, transparent);
+    0 0 18px 3px color-mix(in srgb, var(--ink-red) 55%, transparent),
+    0 0 52px 12px color-mix(in srgb, var(--ink-red) 22%, transparent);
 }
 
 /* 标尺要占左边那块空白：视口不够宽时（<860px 纸面几乎贴边）直接隐藏 */
