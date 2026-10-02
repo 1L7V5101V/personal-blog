@@ -116,7 +116,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   width: max-content;
   will-change: transform;
   position: relative;
-  z-index: 1;
+  z-index: 3;
 }
 
 .hline {
@@ -125,12 +125,26 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 0;
+  z-index: 2;
 }
 .hline path {
   fill: none;
-  stroke: #c6c6c0;
-  stroke-width: 1.5;
+  stroke-width: 13;
+  stroke-linecap: round;
+  opacity: 0.92;
+}
+.hline path:nth-child(1) { stroke: #4a4af0; }
+.hline path:nth-child(2) { stroke: #4a4af0; stroke-width: 10; }
+.hline path:nth-child(3) { stroke: #35e0d6; stroke-width: 10; }
+
+/* 流体层：指尖划过的彩虹烟 */
+#fluid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
 }
 
 /* 槽位：卡外元素（标签/图注/提示）全部绝对定位，槽内只有卡，保证所有卡垂直中心对齐 */
@@ -505,6 +519,7 @@ footer.site {
   .slot, .heroeslot, .listpanel, .manifesto, .endpanel { width: 88vw; min-width: 88vw; }
   .slot, .panel { scroll-snap-align: center; }
   .hline { display: none; }
+  #fluid { display: none; }
 }
 
 /* ---------- reduced motion ---------- */
