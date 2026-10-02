@@ -52,7 +52,6 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         <!-- 2 · 图片卡（悬停虚化） -->
         {featured.map((p, i) => (
           <div class="slot">
-            <span class="tag">{String(i + 1).padStart(2, '0')} · {p.data.tag}</span>
             <a class="hcard" href={`/blog/${p.id}/`}>
               <figure>
                 <div class="imgbox">
@@ -70,7 +69,6 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
 
         <!-- 3 · 字体海报卡（巨型裁切文字 + 色块圆；过中心后爆发加速） -->
         <div class="slot pslot">
-          <span class="tag">为什么我又开始写博客了</span>
           <a class="poster" href="/blog/why-blog-again/">
             <span class="dot pdot" style="width: 46%; right: 7%; top: 9%;"></span>
             <span class="pword">写</span>
@@ -78,7 +76,6 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           </a>
         </div>
         <div class="slot pslot">
-          <span class="tag">把 Lusion 的滑动效果拆开看</span>
           <a class="poster" href="/blog/deconstruct-lusion-scroll/">
             <span class="dot dot-orange pdot" style="width: 46%; right: 7%; top: 9%;"></span>
             <span class="pword">拆</span>
@@ -86,7 +83,6 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           </a>
         </div>
         <div class="slot pslot">
-          <span class="tag">惯性滚动的手感是怎么调出来的</span>
           <a class="poster" href="/blog/lenis-smooth-scroll/">
             <span class="dot pdot" style="width: 42%; right: 6%; top: 12%;"></span>
             <span class="pword">100%</span>
@@ -96,7 +92,6 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
 
         <!-- 4 · 全部文章：白卡 -->
         <section class="slot listpanel">
-          <span class="tag">全部文章 · {posts.length} 篇</span>
           <div class="listpanel-card">
             <div class="list">
               {posts.map((p, i) => (
@@ -180,10 +175,22 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       r: Math.random() * 14 - 7,     // -7° ~ 7°
       x: Math.random() * 64 - 32,    // ±32px
       y: Math.random() * 40 - 20,    // ±20px
+      spin: Math.random() * 50 - 25, // 落牌时边掉边转的额外角度
     }));
-    pilePose[0] = { r: 0, x: 0, y: 0 };
+    pilePose[0] = { r: 0, x: 0, y: 0, spin: 0 };
     // 瀑布落牌：牌按次序从堆里逐张落下归位（0=同时，1=完全串行）
     const STAGGER = 0.55;
+    // 加载落牌入场：底牌先落、hero 最后盖上；从上方掉落 + 边掉边转
+    const enterT0 = performance.now();
+    const ENTER_DELAY = 0.09;   // 每张间隔（秒）
+    const ENTER_DUR = 0.75;     // 单张坠落时长（秒）
+    const skipEnter = scrollY > 50; // 刷新恢复到中途滚动位置时不播入场
+    const enterLocal = (i: number) => {
+      if (skipEnter) return 1;
+      const t = (performance.now() - enterT0) / 1000;
+      const delay = (N - 1 - i) * ENTER_DELAY; // i=N-1 最底牌先落，hero 压轴
+      return Math.max(0, Math.min(1, (t - delay) / ENTER_DUR));
+    };
 
     (window as any).__fx = (window as any).__fx || [];
     (window as any).__fx.push(() => {
@@ -211,6 +218,7 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       // 开场牌堆：S=0 居中一张卡、底下随机角度+微偏移堆叠；滚动 = 平移展开回轨道，牌不缩放
       const flyRaw = Math.max(0, Math.min(1, S / UNFOLD_DIST));
       const flyPe = easeInOut(flyRaw);
+      const vh = innerHeight;
       const cx = innerWidth / 2, cy = innerHeight / 2;
 
       fanEls.forEach((el, i) => {
@@ -226,16 +234,16 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           return;
         }
         const pp = pilePose[i];
+        const landPe = 1 - Math.pow(1 - enterLocal(i), 3); // easeOutCubic 落地
         const naturalX = el.offsetLeft - STrack;
         const tx = (cx - slotW / 2 + pp.x - naturalX) * (1 - flyPe);
-        const ty = (cy - slotH / 2 + pp.y - slotY) * (1 - flyPe);
+        // 落牌：从上方 0.8vh + 依序错位处掉入，spin 收转
+        const ty = (cy - slotH / 2 + pp.y - slotY) * (1 - flyPe) - (1 - landPe) * (vh * 0.8 + i * 30);
         el.style.transformOrigin = '50% 50%';
         el.style.zIndex = String(20 + (N - i)); // hero 最上
+        el.style.opacity = String(Math.min(1, 0.25 + landPe));
         el.style.transform =
-          `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) rotate(${(pp.r * (1 - flyPe)).toFixed(2)}deg) skewX(${skew.toFixed(2)}deg)`;
-        // 小标签跟着牌落定：铺平后才显形
-        const tg = el.querySelector<HTMLElement>('.tag');
-        if (tg) tg.style.opacity = String(Math.max(0, (flyPe - 0.6) / 0.4));
+          `translate3d(${tx.toFixed(1)}px, ${ty.toFixed(1)}px, 0) rotate(${((pp.r + (1 - landPe) * pp.spin) * (1 - flyPe)).toFixed(2)}deg) skewX(${skew.toFixed(2)}deg)`;
       });
 
       // 海报卡内部字体平移：卡片进入视野开始，到达视口中心时滑到末位，之后冻结
