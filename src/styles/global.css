@@ -148,6 +148,15 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   pointer-events: none;
 }
 
+/* 悬停：卡片内容轻微放大 */
+.slot .hero-card, .slot .hcard, .slot .poster, .slot .listpanel-card {
+  transition: transform 0.45s var(--ease-out), box-shadow 0.45s var(--ease-out);
+  will-change: transform;
+}
+.slot:hover .hero-card, .slot:hover .hcard, .slot:hover .poster, .slot:hover .listpanel-card {
+  transform: scale(1.025);
+}
+
 /* 槽位：卡外元素（标签/图注/提示）全部绝对定位，槽内只有卡，保证所有卡垂直中心对齐 */
 .slot {
   flex: none;
@@ -238,10 +247,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: var(--card);
-  clip-path: inset(0 100% 0 0 round var(--card-r));
-  transition: clip-path 1.1s var(--ease-out);
 }
-.hcard.in .imgbox { clip-path: inset(0 0 0 0 round var(--card-r)); }
 .hcard img {
   width: 100%;
   height: 100%;
@@ -510,6 +516,12 @@ footer.site {
 }
 
 /* ---------- 移动端 ---------- */
+/* 首帧门控：等 fx 摆好扇位再显形（仅桌面，JS 失效时不遮蔽由媒体查询兜底） */
+@media (min-width: 769px) and (prefers-reduced-motion: no-preference) {
+  .journey:not(.fx-ready) .track { opacity: 0; }
+  .journey .track { transition: opacity 0.3s ease; }
+}
+
 @media (max-width: 768px) {
   .journey { height: auto !important; }
   .stage {
@@ -536,7 +548,6 @@ footer.site {
     animation-duration: 0.01ms !important;
   }
   [data-reveal], [data-io] { opacity: 1 !important; transform: none !important; }
-  .hcard .imgbox { clip-path: none !important; }
   .journey { height: auto !important; }
   .stage { position: static; height: auto; overflow: visible; }
   .track { transform: none !important; flex-wrap: wrap; }
