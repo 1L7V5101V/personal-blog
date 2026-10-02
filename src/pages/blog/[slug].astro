@@ -201,12 +201,19 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       // ---- 光球：落在当前标题的垂直中心 ----
       // ⚠ 必须夹在视口内。标题一旦滚出屏幕顶端，严格跟随会把球带到屏幕外，
       // 而大部分阅读时间里当前节的标题恰好已经在视口上方 —— 球会整个消失。
-      // 所以上方出界就停在 NAV 边距，下方出界就停在 dock 上方。
+      // 所以上方出界就停在顶棚遮罩下沿，下方出界就停在 dock 上方。
       const a = active();
       const M = 104;
       const target = Math.min(Math.max(a.top - scrollY + a.h / 2, M), vh - M);
-      const k = snap ? 1 : 1 - Math.pow(1 - 0.12, dt / 16.67);
-      curY = snap ? target : curY + (target - curY) * k;
+
+      // ⚠ 追赶速度必须随距离变快。固定 0.12（τ≈160ms）看着「流畅」，
+      // 但快速往上滚时目标会瞬间跳到球的上方几百像素，球还在原地慢慢滑 ——
+      // 那一瞬它就停在**旧标题**旁边，看着像错位而不是动画。
+      // 远处的跳变要在两三帧内追上，附近的微调才慢慢逼近。
+      const dist = Math.abs(target - curY);
+      const rate = Math.min(0.45, 0.12 + dist / 700);
+      const k = snap || !Number.isFinite(curY) ? 1 : 1 - Math.pow(1 - rate, dt / 16.67);
+      curY = snap || !Number.isFinite(curY) ? target : curY + (target - curY) * k;
 
       // 尺寸只在这一刻的层级真的变了时才写：改 width 会触发重排 + 重画光晕
       if (a.level !== lastBall) {

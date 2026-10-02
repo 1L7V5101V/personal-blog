@@ -703,13 +703,23 @@ footer.site {
    这个切换本身就是页面过渡要干的事。
    ⚠ .article 是外层容器（只负责上/下留白），.paper 才是那张纸 ——
    纸不能滑到顶栏底下去，否则顶棚那道暗渐变会横穿纸面。 */
-.article { padding-top: 8rem; padding-bottom: 6rem; }
+/* .article 就是那个 .wrap 容器（标记是 `class="wrap article"`），
+   只负责上下留白 + 把纸面定宽；真正的纸是里层的 .paper。
+   文章页比别的页宽：--measure 仍是 42rem（列表页/关于页保持窄栏），
+   这里单独开到 52rem —— 技术类文章的表格和长公式需要横向余地，
+   42rem 下表格会挤成两行。左边那截留给标尺：1440 宽的屏上纸面左边缘在 288px，
+   标尺只占 46~110px，够用。 */
+.article {
+  padding-top: 8rem;
+  padding-bottom: 6rem;
+  width: min(52rem, calc(100vw - 3rem));
+}
 .paper {
   background: var(--paper);
   color: var(--ink-2);
   border-radius: var(--card-r);
   box-shadow: 0 34px 90px rgba(0, 0, 0, 0.7);
-  padding: clamp(1.6rem, 5vw, 4rem);
+  padding: clamp(2rem, 5.5vw, 5rem);
 }
 .article .meta {
   font-size: 0.85rem;
