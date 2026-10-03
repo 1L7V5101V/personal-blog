@@ -8,7 +8,7 @@ const posts = (await getCollection('blog')).sort(
 const featured = posts.slice(0, 2);
 const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
 ---
-<Base>
+<Base ecgMode="strip">
   <!-- 首页自带入场秀：刷新时不要让浏览器恢复滚动位置（否则会错过开场，或被中途的位置卡住） -->
   <script is:inline>history.scrollRestoration = 'manual';</script>
   <!-- 整页横向 journey：垂直滚动驱动整条轨道（瑞士海报风） -->
@@ -494,9 +494,24 @@ void main(){
       // 展开期要推进的距离：直接把第 2 张卡的中心对到屏幕中心（用测出来的，别用「一张牌间距」算——
       // 牌堆是按卡片在屏幕居中摆的，而轨道布局左边有 padding-inline，两者差着半个 padding）
     };
+    // ── 顶部心电图（走纸式）：一拍 = 一张卡，R 峰就在那张卡的正上方 ──────────────
+    // 横条和屏幕 1:1（.ecg 就是 left:0;right:0），所以峰位不需要任何换算，窗口多宽都一样：
+    // 卡滑到屏心 = 它那一拍滑过横条中间的「现在线」。纸带建在轨道坐标里，每帧吃和轨道
+    // 同一个位移（-STrack）。几何全在 EcgProgress 里，页面只交版位。
+    // ⚠ 组件脚本和本页脚本谁先跑不保证，所以每帧现查 window.__ecgStrip；没建成就下一帧补。
+    // ⚠ 只在桌面 journey 里注册：移动端 / reduced-motion 轨道不跑，横条留在按滚动深度那条退路。
+    let ecgBuilt = false;
+    const buildEcg = () => {
+      const s = (window as any).__ecgStrip;
+      if (!s) return;
+      s.build(fanEls.map((el) => el.offsetLeft + el.offsetWidth / 2), innerWidth / 2);
+      ecgBuilt = true;
+    };
+
     measureFan();
     measure();
-    const onResize = () => { measureFan(); measure(); };
+    buildEcg();
+    const onResize = () => { measureFan(); measure(); ecgBuilt = false; };   // 纸带由 fx 循环下一帧重建
     addEventListener('resize', onResize);
     addEventListener('load', onResize);
 
@@ -701,6 +716,11 @@ void main(){
       const unfoldPe = easeInOut(unfoldRaw);
       const conveyor = Math.max(0, SUnfold - UNFOLD_DIST) * TRACK_SPEED;
       const STrack = panEnd * unfoldPe + conveyor;
+      const ecg = (window as any).__ecgStrip;
+      if (ecg) {
+        if (!ecgBuilt) buildEcg();
+        ecg.move(STrack);
+      }
       // 曲线描绘、斜切、曲面屏都只认 conveyor（不加展开期那段推进）→ 观感与改动前一致，
       // 不会出现“牌刚落地就被拉弯/斜切”
       const p = dist > panEnd ? Math.min(1, conveyor / (dist - panEnd)) : 0;

@@ -2,7 +2,13 @@
 import '../styles/global.css';
 import EcgProgress from '../components/EcgProgress.astro';
 
-const { title = 'il7510n', description = 'il7510n 的个人博客' } = Astro.props;
+interface Props {
+  title?: string;
+  description?: string;
+  /** 顶部心电图模式：'fill' = 阅读进度条（默认）；'strip' = 走纸式，一拍画在一张卡正上方（首页） */
+  ecgMode?: 'fill' | 'strip';
+}
+const { title = 'il7510n', description = 'il7510n 的个人博客', ecgMode } = Astro.props;
 const EMAIL = 'hi@il7510n.dpdns.org'; // TODO: 换成真实邮箱
 ---
 <!doctype html>
@@ -31,7 +37,7 @@ const EMAIL = 'hi@il7510n.dpdns.org'; // TODO: 换成真实邮箱
       </div>
     </nav>
 
-    <EcgProgress />
+    <EcgProgress mode={ecgMode} />
 
     <main>
       <slot />

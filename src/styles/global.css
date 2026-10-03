@@ -739,6 +739,17 @@ footer.site {
 .ecg .bg { stroke: var(--accent); opacity: 0.16; }
 .ecg .fg { stroke: var(--accent); }
 
+/* 走纸式（首页）：一层暗的整条纸带 + 一层只留「现在线」左边的亮的。
+   .ecg-is-strip 由组件在纸带建成后才挂 —— 建成前（移动端 / reduced-motion、
+   或组件脚本还没跑）保持上面那套按滚动深度描的进度条，不会出现空横条。
+   ⚠ 走纸式的 <svg> 没有 viewBox：用户坐标就是 CSS px，横条和屏幕 1:1，
+   「峰在卡的正上方」才不需要任何换算。 */
+.ecg .ecg-fill, .ecg .ecg-strip { position: absolute; inset: 0; }
+.ecg-strip { display: none; }
+.ecg-is-strip .ecg-fill { display: none; }
+.ecg-is-strip .ecg-strip { display: block; }
+.ecg-strip .now-line { stroke: var(--accent); stroke-width: 1; opacity: 0.3; }
+
 /* ---------- 文章页 ----------
    深色壳子里的一张白纸，红棕墨水。点开一篇真去读 = 从黑场落到纸上，
    这个切换本身就是页面过渡要干的事。
