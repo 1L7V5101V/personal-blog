@@ -1,11 +1,9 @@
 ---
 import '../styles/global.css';
 import EcgProgress from '../components/EcgProgress.astro';
-import Dock from '../components/Dock.astro';
 
 const { title = 'il7510n', description = 'il7510n 的个人博客' } = Astro.props;
 const EMAIL = 'hi@il7510n.dpdns.org'; // TODO: 换成真实邮箱
-const path = Astro.url.pathname;
 ---
 <!doctype html>
 <html lang="zh-CN">
@@ -48,8 +46,6 @@ const path = Astro.url.pathname;
       <span>© 2026 il7510n</span>
       <span>滚动越深，心跳越完整</span>
     </footer>
-
-    <Dock path={path} />
 
     <script>
       import Lenis from 'lenis';

@@ -644,40 +644,13 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 
 /* ---------- 页脚 ---------- */
 footer.site {
-  padding: 3rem 1.5rem 7rem;
+  /* 底部 dock 已删（导航挪回顶栏），页脚不用再给它留 7rem 的空 */
+  padding: 3rem 1.5rem 2.5rem;
   display: flex;
   justify-content: space-between;
   color: var(--fg-3);
   font-size: 0.85rem;
 }
-
-/* ---------- 底部 dock ---------- */
-.dock {
-  position: fixed;
-  bottom: 1.2rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 0.25rem;
-  padding: 0.3rem;
-  border-radius: 999px;
-  border: 1px solid var(--hairline);
-  /* 黑场上的 backdrop-filter 没有可模糊的东西（底下已经是纯黑），白花钱还占栅格预算 */
-  background: rgba(20, 20, 22, 0.86);
-  z-index: 40;
-}
-.dock a {
-  display: grid;
-  place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 999px;
-  color: var(--fg-2);
-  transition: background 0.3s, color 0.3s, transform 0.3s var(--ease-out);
-}
-.dock a:hover { background: color-mix(in srgb, var(--white) 10%, transparent); color: var(--light); transform: translateY(-2px); }
-.dock a[aria-current="page"] { color: var(--light); background: color-mix(in srgb, var(--white) 14%, transparent); }
-.dock svg { width: 1.05rem; height: 1.05rem; }
 
 /* ---------- ECG 心电进度条 ---------- */
 /* ---------- ECG 心电进度条 ----------
