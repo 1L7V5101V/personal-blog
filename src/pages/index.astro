@@ -142,6 +142,8 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
   const posters = [...document.querySelectorAll<HTMLElement>('.pslot')];
   const mobile = matchMedia('(max-width: 768px)');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // 牌堆是否已完全展开（journey 块每帧更新）：倾斜跟随只在未展开时生效
+  let deckUnfolded = false;
 
   // 流体模拟：仅桌面加载（vendor 自 WebGL-Fluid-Simulation，MIT）
   if (!mobile.matches && !reduced.matches) {
@@ -313,6 +315,130 @@ void main(){
       });
       // 画布尺寸变了（缩放窗口）但鼠标没在动时也得重画一次，否则会拉伸模糊
       addEventListener('resize', () => { for (const p of cards) p.dirty = true; }, { passive: true });
+    }
+  }
+
+  // ── 卡片倾斜跟随（hover 时卡面朝光标方向偏转 + 表面光跟着鼠标走）─────────────────
+  // 只给 hero 卡和海报卡：图片卡已有逐像素深度视差，再叠刚性倾斜是两套「鼠标视差」打架；
+  // 列表面板文字多，保持安静。缩放也归这里管（inline transform 会盖掉 .slot:hover 的 scale）。
+  // ⚠ transform 每帧 inline 写入，所以 .is-tilt 的 transform 过渡已在 CSS 里关死；
+  //   弯牌（is-bent）期间让位 —— 切片正占用卡片本体的 transform（本体=中条），只缓动不落笔，
+  //   铺平后从当前值接着写，不跳。pt-opening（点开过渡用 !important 压平卡片）同理让位。
+  if (matchMedia('(hover: hover)').matches && !reduced) {
+    const TILT_MAX = 8;       // 最大倾角 deg（光标扫到卡缘时）
+    const TILT_TAU = 0.13;    // 缓动时间常数 s：__fx 回调不传 dt，自己用 performance.now() 算并做帧率归一
+    const HOVER_SCALE = 1.025; // 与 .slot:hover 的 scale 保持一致
+    type Tilt = {
+      card: HTMLElement; slot: HTMLElement;
+      rx: number; ry: number; sc: number;             // 当前值
+      trx: number; tryy: number; tsc: number;         // 目标值
+      shx: number; shy: number; tshx: number; tshy: number;  // 表面光位置（卡内百分比）
+      wtf: string; wshx: number; wshy: number;        // 上次写入值（去重：变量一变整卡重绘）
+      last: number; hover: boolean; live: boolean;
+    };
+    const tilts: Tilt[] = [];
+
+    document.querySelectorAll<HTMLElement>('.slot > .hero-card, .slot > .poster').forEach((card) => {
+      const slot = card.parentElement;
+      if (!slot) return;
+      card.classList.add('is-tilt');
+      const t: Tilt = {
+        card, slot, rx: 0, ry: 0, sc: 1, trx: 0, tryy: 0, tsc: 1,
+        shx: 24, shy: 20, tshx: 24, tshy: 20,
+        wtf: '', wshx: -1, wshy: -1,
+        last: performance.now(), hover: false, live: false,
+      };
+      // 光标相对卡面的归一位置 → 目标倾角 + 表面光位置。光标在槽位里但不在卡面上
+      //（比如 hero 卡下方的「向下滚动」提示）时不倾斜，只保留悬停缩放。
+      const aim = (e: PointerEvent) => {
+        const r = card.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) {
+          t.trx = 0; t.tryy = 0;
+          return;
+        }
+        const cl = (v: number) => Math.max(-1, Math.min(1, v));
+        const nx = cl(((e.clientX - r.left) / r.width) * 2 - 1);
+        const ny = cl(((e.clientY - r.top) / r.height) * 2 - 1);
+        t.trx = -ny * TILT_MAX;   // 按压感：光标在哪，哪边往下沉（rotateX 正 = 上缘向镜头，取负 = 顶边向屏幕里倒）
+        t.tryy = nx * TILT_MAX;   // rotateY 正 = 右缘向后：光标在右 → 右边沉下去（用户纠正过：不是朝观众抬起）
+        t.tshx = 50 + nx * 46;
+        t.tshy = 50 + ny * 46;
+      };
+      slot.addEventListener('pointerenter', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        t.hover = true;
+        t.tsc = deckUnfolded ? 1 : HOVER_SCALE;
+        if (!deckUnfolded) slot.classList.add('is-tilt-on');
+        aim(e);
+      });
+      slot.addEventListener('pointermove', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        aim(e);
+      });
+      slot.addEventListener('pointerleave', () => {
+        t.hover = false;
+        t.tsc = 1; t.trx = 0; t.tryy = 0;
+        slot.classList.remove('is-tilt-on');
+      });
+      tilts.push(t);
+    });
+
+    if (tilts.length) {
+      const fxq = ((window as any).__fx ||= []);
+      fxq.push(() => {
+        const now = performance.now();
+        for (const t of tilts) {
+          const dt = Math.min(0.064, (now - t.last) / 1000);
+          t.last = now;
+          // 完全展开后倾斜退场（用户要求：journey 段不触发，滚轮滚动和弯牌的衔接优先）：
+          // 转角目标清零、缓动自己回正，光晕同步摘掉；悬停放大也一并收回（tsc 恒 1，
+          // journey 的 hover 行为回到完全无放大的安静态）。滚回牌堆会自动恢复。
+          if (deckUnfolded) {
+            t.trx = 0; t.tryy = 0;
+            t.tsc = 1;
+            if (t.slot.classList.contains('is-tilt-on')) t.slot.classList.remove('is-tilt-on');
+          }
+          const k = 1 - Math.exp(-dt / TILT_TAU);
+          t.rx += (t.trx - t.rx) * k;
+          t.ry += (t.tryy - t.ry) * k;
+          t.sc += (t.tsc - t.sc) * k;
+          t.shx += (t.tshx - t.shx) * k;
+          t.shy += (t.tshy - t.shy) * k;
+          // 切片 / 点开过渡期间 CSS 正占用卡片的 transform，别写。
+          // 同时作废去重缓存：弯牌结束 flatSegs 会清掉卡片 inline transform，
+          // 缓存不清的话回平后 tf === wtf 会跳过重写 → 鼠标不动倾斜就丢了。
+          // 投影（.slot::before 吃 --tilt）也一并放平：影子归弯牌/过渡的状态管。
+          if (t.slot.classList.contains('is-bent') || t.slot.classList.contains('pt-opening')) {
+            t.wtf = '';
+            if (t.live) { t.slot.style.setProperty('--tilt', 'none'); t.live = false; }
+            continue;
+          }
+          const still =
+            Math.abs(t.rx) + Math.abs(t.ry) < 0.02 &&
+            Math.abs(t.sc - t.tsc) < 0.0005;
+          if (still && !t.hover) {
+            if (t.live) {           // 完全回正：清掉 inline，交还 CSS（:hover 缩放规则重新生效）
+              t.card.style.transform = '';
+              t.slot.style.setProperty('--tilt', 'none');
+              t.rx = t.ry = 0; t.sc = 1; t.wtf = ''; t.live = false;
+            }
+            continue;
+          }
+          const tf = `perspective(1000px) rotateX(${t.rx.toFixed(2)}deg) rotateY(${t.ry.toFixed(2)}deg) scale(${t.sc.toFixed(4)})`;
+          if (tf !== t.wtf) {
+            t.card.style.transform = tf;
+            t.slot.style.setProperty('--tilt', tf);   // 投影同一个 transform：影子跟着卡一起斜
+            t.wtf = tf; t.live = true;
+          }
+          const shx = Math.round(t.shx * 2) / 2, shy = Math.round(t.shy * 2) / 2;   // 量化 0.5%，静止就不重绘
+          if (shx !== t.wshx || shy !== t.wshy) {
+            t.wshx = shx; t.wshy = shy;
+            t.slot.style.setProperty('--shx', `${shx}%`);
+            t.slot.style.setProperty('--shy', `${shy}%`);
+          }
+        }
+      });
     }
   }
 
@@ -490,6 +616,11 @@ void main(){
         seg.style.transform = `translate3d(0px, ${ty.toFixed(2)}px, ${tz.toFixed(2)}px) rotateX(${ang.toFixed(2)}deg)`;
       };
       const phiMid = amt(mid), thMid = rad(phiMid);
+      // 投影跟着弯：.slot::before 吃 --tilt（和倾斜跟随同一个变量），取中条的转角 ——
+      // 卡弯成括号形（顶 0° → 底 BEND_MAX），影子转到中间值就不再是一块平矩形垫在弧卡后面；
+      // 槽位此时挂着 BEND_PERS 的 perspective，::before 作为子元素直接继承视点。
+      // 倾斜回调在 is-bent 期间让位不写 --tilt，两个写者不打架。
+      fanEls[i].style.setProperty('--tilt', `rotateX(${phiMid.toFixed(2)}deg)`);
       segs[mid].style.transformOrigin = '50% 50%';
       segs[mid].style.transform = `rotateX(${phiMid.toFixed(2)}deg)`;
       // 下链：从中条下缘往下，每片绕自身【上缘】折
@@ -554,6 +685,10 @@ void main(){
       // 第二段：展开期牌一边铺开、整条轨道一边就开始“向右走”，走满 panEnd →
       // 铺平完成时屏幕中心正好落在第 2 张卡的中心；此后由 conveyor 接管常规横向推进
       const unfoldRaw = Math.max(0, Math.min(1, SUnfold / UNFOLD_DIST));
+      // 完全展开后倾斜跟随与悬停放大一起退场（tilt 块每帧读这个；
+      // .deck-unfolded 类让 CSS 盖掉 .slot:hover 的 scale，所有卡都安静）
+      deckUnfolded = unfoldRaw >= 0.999;
+      journey.classList.toggle('deck-unfolded', deckUnfolded);
       const unfoldPe = easeInOut(unfoldRaw);
       const conveyor = Math.max(0, SUnfold - UNFOLD_DIST) * TRACK_SPEED;
       const STrack = panEnd * unfoldPe + conveyor;

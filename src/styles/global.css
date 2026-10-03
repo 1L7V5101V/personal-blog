@@ -34,7 +34,7 @@
   --ink-2: #6b4a35;        /* 纸上的正文（采样 #5b3729 的邻近家族） */
   --ink-3: #9c8069;        /* 纸上的次文 */
   --paper-line: #dde5ea;
-  --card-r: clamp(18px, 2.2vw, 30px); /* Apple 式大圆角 */
+  --card-r: clamp(36px, 4.4vw, 60px); /* Apple 式大圆角（2026-10 用户要求 ×2，原 clamp(18px, 2.2vw, 30px)） */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --measure: 42rem;
 }
@@ -110,42 +110,6 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
     rgba(0, 0, 0, 0.30) 60%,
     rgba(0, 0, 0, 0.12) 76%,
     rgba(0, 0, 0, 0.04) 88%,
-    transparent 100%
-  );
-}
-
-/* ---------- 顶部遮罩 · 第二层（渐变模糊） ----------
-   上面那层的模糊半径是恒定的 5px，出遮罩的瞬间从「糊」跳到「清」，
-   即使 alpha 已经很低，内容细节上仍是一条对焦线。
-   这一层只模糊、不带底色，从主遮罩的中段淡入、以更小的半径
-   往下延伸再化掉 —— 模糊强度变成 5px→(叠 3px)→3px→0 的连续下滑，
-   末尾就不再有清晰度的突变。窄带 + 小半径，成本仍然可控。 */
-.topveil-soft {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 168px;
-  z-index: 38;              /* 垫在 .topveil(39) 之下 */
-  pointer-events: none;
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
-  /* 顶部不让它出力（主遮罩已经糊了，叠两遍会把顶栏压得过糊）：
-     34% 前全透明，中段淡入到峰值，底部再化掉 */
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0 34%,
-    rgba(0, 0, 0, 0.75) 54%,
-    rgba(0, 0, 0, 0.38) 74%,
-    rgba(0, 0, 0, 0.12) 90%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0 34%,
-    rgba(0, 0, 0, 0.75) 54%,
-    rgba(0, 0, 0, 0.38) 74%,
-    rgba(0, 0, 0, 0.12) 90%,
     transparent 100%
   );
 }
@@ -285,6 +249,48 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .slot:hover .hero-card, .slot:hover .hcard, .slot:hover .poster, .slot:hover .listpanel-card {
   transform: scale(1.025);
 }
+/* 完全展开后的 journey 段：悬停放大整个退场（堆叠阶段保留）。
+   .deck-unfolded 由 JS 随展开进度挂到 .journey 上（见 index.astro 的 deckUnfolded）。
+   图片卡的散焦/对焦、深度视差不在此列，照常生效 —— 只放大不去。 */
+.journey.deck-unfolded .slot:hover .hero-card,
+.journey.deck-unfolded .slot:hover .hcard,
+.journey.deck-unfolded .slot:hover .poster,
+.journey.deck-unfolded .slot:hover .listpanel-card {
+  transform: none;
+}
+
+/* ---------- 卡片倾斜跟随（hover：卡面朝光标偏转 + 表面光跟着鼠标走）----------
+   只挂 hero 卡和海报卡（JS 加 .is-tilt）：图片卡已有逐像素深度视差，再叠一层刚性
+   倾斜是两套「鼠标视差」在打架；列表面板文字多，要安静。
+   transform 全程由 rAF 写 inline（上面那条 :hover scale 被 inline 盖掉，缩放归 JS 管），
+   所以 transform 过渡必须关死 —— 否则每帧写入都被 0.45s 过渡拖住，永远慢半拍。
+   表面光坐标 --shx/--shy 挂在槽位上：切片克隆从槽位继承，弯成 11 条也同步（同 --pan 的道理）；
+   显隐挂 .slot.is-tilt-on 而不是 :hover —— 克隆片匹配不到 :hover，接缝会一半亮一半暗。 */
+.slot > .is-tilt {
+  transition: none !important;
+}
+.slot > .is-tilt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;   /* 垫在内容之上（hero-text / .pword / .psub 都是 z-index 1） */
+  opacity: 0;
+  transition: opacity 0.45s var(--ease-out);
+  /* 光晕：圆形、圆心就在光标处，渐变分段拉长 —— 中段给个台阶，尾段化得慢，不出硬边。
+     （原来叠过一层「背光侧」镜像暗影：白卡上白高光看不出，可见的只剩那团暗影，
+     光晕就像跑到了光标对侧 —— 已去掉，光的方向感交给倾斜本身。） */
+  background: radial-gradient(
+    circle at var(--shx, 24%) var(--shy, 20%),
+    rgba(255, 255, 255, 0.5),
+    rgba(255, 255, 255, 0.2) 30%,
+    rgba(255, 255, 255, 0) 60%
+  );
+}
+.slot.is-tilt-on > .is-tilt::after {
+  opacity: 1;
+}
 
 /* 弯牌分段：飞行时把牌横切成多条（中条是原牌，其余是克隆），落定后移除。
    必须用 !important 压过后面 .poster/.hero-card 等规则里的 position，否则克隆片会回到流里竖着排。 */
@@ -329,6 +335,10 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   pointer-events: none;
   z-index: -1;
   will-change: transform;
+  /* 卡片倾斜跟随（.is-tilt）时投影跟着一起斜：JS 把和卡片相同的 transform
+     写进槽位的 --tilt，这里原样吃掉。::before 没法写 inline，走变量；
+     弯牌/点开过渡期间 JS 会把它放平回 none。 */
+  transform: var(--tilt, none);
 }
 .hero-card, .hcard .imgbox, .poster, .listpanel-card {
   border-radius: var(--card-r);
@@ -737,18 +747,21 @@ footer.site {
 /* .article 就是那个 .wrap 容器（标记是 `class="wrap article"`），
    只负责上下留白 + 把纸面定宽；真正的纸是里层的 .paper。
    文章页比别的页宽：--measure 仍是 42rem（列表页/关于页保持窄栏），
-   这里单独开到 52rem —— 技术类文章的表格和长公式需要横向余地，
-   42rem 下表格会挤成两行。左边那截留给标尺：1440 宽的屏上纸面左边缘在 288px，
-   标尺只占 46~110px，够用。 */
+   这里单独开到 93.6rem（原 52rem × 1.8，用户要求加宽 80%）。 */
 .article {
   padding-top: 8rem;
   padding-bottom: 6rem;
-  width: min(52rem, calc(100vw - 3rem));
+  width: min(93.6rem, calc(100vw - 3rem));
 }
 .paper {
   background: var(--paper);
   color: var(--ink-2);
   border-radius: var(--card-r);
+  /* 文章页字体基准 ×1.5（16 → 24px）：正文、列表、KaTeX（1.21em）都跟着走 */
+  font-size: 1.5rem;
+  /* 左右内边距各占纸宽 20%（合计 40%，用户定的比例）；上下保持原来的 clamp */
+  padding-block: clamp(2rem, 5.5vw, 5rem);
+  padding-inline: 20%;
   /* ⚠ 模糊半径别给大。这份 12k px 高的笔记上，原来的 90px 模糊阴影要栅格化
      一块 (832+180)×(12193+180) 的区域，而底部那道阴影在视口下方一万二千像素处，
      根本看不见 —— 每帧都在算一个永远看不到的东西。收紧到 44px 即可：
@@ -756,18 +769,17 @@ footer.site {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--paper-line) 70%, transparent),
     0 18px 44px rgba(0, 0, 0, 0.6);
-  padding: clamp(2rem, 5.5vw, 5rem);
 }
 .article .meta {
-  font-size: 0.85rem;
+  font-size: 1.275rem;
   color: var(--ink-3);
   display: flex;
   gap: 1rem;
   margin-bottom: 2.5rem;
 }
-.prose h1 { font-size: clamp(1.9rem, 4vw, 2.8rem); line-height: 1.25; margin-bottom: 0.5em; color: var(--ink); }
-.prose h2 { font-size: 1.4rem; margin-top: 2.4em; color: var(--ink); }
-.prose h3 { font-size: 1.1rem; margin-top: 2em; color: var(--ink); }
+.prose h1 { font-size: clamp(2.85rem, 6vw, 4.2rem); line-height: 1.25; margin-bottom: 0.5em; color: var(--ink); }
+.prose h2 { font-size: 2.1rem; margin-top: 2.4em; color: var(--ink); }
+.prose h3 { font-size: 1.65rem; margin-top: 2em; color: var(--ink); }
 .prose p { color: var(--ink-2); }
 .prose a { color: var(--ink); border-bottom: 1px solid var(--paper-line); transition: border-color 0.3s, color 0.3s; }
 .prose a:hover { color: var(--accent); border-color: var(--accent); }
@@ -784,7 +796,7 @@ footer.site {
   border: 1px solid var(--paper-line);
   padding: 1rem 1.2rem;
   overflow-x: auto;
-  font-size: 0.875rem;
+  font-size: 1.3125rem;
   line-height: 1.7;
 }
 .prose pre code { background: none; border: none; padding: 0; }
@@ -793,7 +805,7 @@ footer.site {
   width: 100%;
   border-collapse: collapse;
   margin: 1.6em 0;
-  font-size: 0.82rem;
+  font-size: 1.23rem;
   line-height: 1.5;
 }
 .prose th,
@@ -828,7 +840,7 @@ footer.site {
   border-left: 2px solid var(--ink);
   color: var(--ink-3);
 }
-.backlink { color: var(--ink-3); font-size: 0.9rem; }
+.backlink { color: var(--ink-3); font-size: 1.35rem; }
 
 /* ============================================================
    阅读导引（只在文章详情页）
