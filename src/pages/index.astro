@@ -52,7 +52,6 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
               <span class="line s3"><span class="mask"><span data-reveal style="--i:3">想清楚一点。</span></span></span>
             </div>
           </a>
-          <p class="hero-hint" data-reveal style="--i:4">向下滚动，整页向右 →</p>
         </section>
 
         <!-- 2 · 图片卡（悬停虚化） -->
@@ -83,21 +82,18 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           <a class="poster geo-grid" href="/blog/why-blog-again/" data-pt="poster:why-blog-again">
             <span class="dot pdot" style="width: 34%; right: 5%; top: 10%;"></span>
             <span class="pword">写</span>
-            <span class="psub">收藏夹越来越厚，写出来的越来越少。</span>
           </a>
         </div>
         <div class="slot pslot">
           <a class="poster geo-rings" href="/blog/deconstruct-lusion-scroll/" data-pt="poster:deconstruct-lusion-scroll">
             <span class="dot dot-ink pdot" style="width: 34%; right: 5%; top: 10%;"></span>
             <span class="pword">拆</span>
-            <span class="psub">幕帘、缩放、描线——全是基础功。</span>
           </a>
         </div>
         <div class="slot pslot">
           <a class="poster geo-split" href="/blog/lenis-smooth-scroll/" data-pt="poster:lenis-smooth-scroll">
             <span class="dot pdot" style="width: 30%; right: 5%; top: 12%;"></span>
             <span class="pword">100%</span>
-            <span class="psub">动效全手写 · 零现成模板</span>
           </a>
         </div>
 
@@ -125,10 +121,6 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
         <!-- 6 · 到头了 -->
         <section class="panel endpanel">
           <p class="big" data-io style="--i:0">到头了。</p>
-          <p data-io style="--i:1">
-            去 <a class="u" href="/blog/">/blog</a> 逐篇读，
-            或者 <button class="u" data-copy="hi@il7510n.dpdns.org">复制邮箱</button> 聊聊。
-          </p>
         </section>
       </div>
     </div>
@@ -349,7 +341,7 @@ void main(){
         last: performance.now(), hover: false, live: false,
       };
       // 光标相对卡面的归一位置 → 目标倾角 + 表面光位置。光标在槽位里但不在卡面上
-      //（比如 hero 卡下方的「向下滚动」提示）时不倾斜，只保留悬停缩放。
+      //（牌堆期卡片各自转着，AABB 的四角是空的）时不倾斜，只保留悬停缩放。
       const aim = (e: PointerEvent) => {
         const r = card.getBoundingClientRect();
         if (!r.width || !r.height) return;

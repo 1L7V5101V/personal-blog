@@ -275,7 +275,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  z-index: 2;   /* 垫在内容之上（hero-text / .pword / .psub 都是 z-index 1） */
+  z-index: 2;   /* 垫在内容之上（hero-text / .pword 都是 z-index 1） */
   opacity: 0;
   transition: opacity 0.45s var(--ease-out);
   /* 光晕：圆形、圆心就在光标处，渐变分段拉长 —— 中段给个台阶，尾段化得慢，不出硬边。
@@ -489,14 +489,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   overflow: hidden;
   padding: clamp(2.5rem, 5vw, 4.5rem);
 }
-.hero-hint {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  padding-top: 0.9rem;
-  font-size: 0.85rem;
-  color: var(--fg-3);
-}
 .hero-card .dot { z-index: 0; }
 .hero-text { position: relative; z-index: 1; }
 .hero-text .lname {
@@ -518,7 +510,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 }
 .hero-text .s2 { margin-left: clamp(1.5rem, 4vw, 4rem); }
 .hero-text .s3 { margin-left: clamp(3rem, 8vw, 8rem); }
-.hero-hint { font-size: 0.85rem; color: var(--fg-3); }
 
 /* 海报色块圆：白卡上不能再用白光（看不见了），改用两个印刷色。
    白光 --light 仍然只给「光」用（.lightbar 的光带、.hline）。 */
@@ -634,14 +625,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   z-index: 0;
   transition: transform 0.6s var(--ease-out);
 }
-.poster .psub {
-  position: absolute;
-  left: clamp(1.5rem, 3vw, 2.5rem);
-  top: clamp(2.8rem, 5.4vw, 4.4rem);   /* 躲开顶栏的暗渐变，否则深灰字压深灰底读不出来 */
-  z-index: 1;
-  font-size: 0.9rem;
-  color: var(--card-fg-2);
-}
 @media (hover: hover) {
   .poster:hover .pdot { transform: scale(1.14); }
 }
@@ -669,23 +652,11 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 /* 结尾 */
 .endpanel { width: min(40rem, 70vw); }
 .endpanel .big {
-  margin: 0 0 1.2rem;
+  margin: 0;
   font-size: clamp(2.4rem, 5vw, 3.8rem);
   font-weight: 650;
+  color: var(--fg-2);
 }
-.endpanel p { color: var(--fg-2); margin: 0; font-size: 1.05rem; }
-.endpanel a { border-bottom: 1px solid var(--fg-3); transition: color 0.3s, border-color 0.3s; }
-.endpanel a:hover { color: var(--light); border-color: var(--light); }
-.endpanel button {
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  border-bottom: 1px solid var(--fg-3);
-  padding: 0;
-  transition: color 0.3s, border-color 0.3s;
-}
-.endpanel button:hover { color: var(--light); border-color: var(--light); }
 
 
 /* ---------- 文章列表 ---------- */
