@@ -24,7 +24,9 @@
 import TegakiRenderer from 'tegaki/astro';
 import caveatFull from 'tegaki/fonts/caveat';
 
-const { text, speed = 5, loop = false, class: className = '' } = Astro.props as {
+// speed 是唯一需要调的旋钮：1 写这一行要 10.4s，5 落到 2.0s，3 约 3.4s。
+// 3 是给文章头选的 —— 比 5 慢，看得出每一笔在走，又不至于让人等。
+const { text, speed = 3, loop = false, class: className = '' } = Astro.props as {
   text: string;
   speed?: number;
   loop?: boolean;
