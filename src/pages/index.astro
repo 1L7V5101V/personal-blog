@@ -322,8 +322,8 @@ void main(){
   // 只给 hero 卡和海报卡：图片卡已有逐像素深度视差，再叠刚性倾斜是两套「鼠标视差」打架；
   // 列表面板文字多，保持安静。缩放也归这里管（inline transform 会盖掉 .slot:hover 的 scale）。
   // ⚠ transform 每帧 inline 写入，所以 .is-tilt 的 transform 过渡已在 CSS 里关死；
-  //   弯牌（is-bent）期间让位 —— 切片正占用卡片本体的 transform（本体=中条），只缓动不落笔，
-  //   铺平后从当前值接着写，不跳。pt-opening（点开过渡用 !important 压平卡片）同理让位。
+  //   弯牌（is-bent）/点开过渡（pt-opening）期间让位 —— 切片正占用卡片本体的 transform
+  //  （本体=中条），不但要不落笔，还要把当前值按回中性，否则铺平那一帧是一次硬跳。
   if (matchMedia('(hover: hover)').matches && !reduced) {
     const TILT_MAX = 8;       // 最大倾角 deg（光标扫到卡缘时）
     const TILT_TAU = 0.13;    // 缓动时间常数 s：__fx 回调不传 dt，自己用 performance.now() 算并做帧率归一
@@ -398,6 +398,11 @@ void main(){
             t.trx = 0; t.tryy = 0;
             t.tsc = 1;
             if (t.slot.classList.contains('is-tilt-on')) t.slot.classList.remove('is-tilt-on');
+          } else if (t.hover) {
+            // 滚回牌堆时指针一直没动：pointerenter 早就过去了（那会儿 deckUnfolded 还是 true，
+            // 缩放和光晕都没给），这里补回，不然只有转角在动、表面光要等鼠标再动一下才亮。
+            t.tsc = HOVER_SCALE;
+            if (!t.slot.classList.contains('is-tilt-on')) t.slot.classList.add('is-tilt-on');
           }
           const k = 1 - Math.exp(-dt / TILT_TAU);
           t.rx += (t.trx - t.rx) * k;
@@ -406,10 +411,14 @@ void main(){
           t.shx += (t.tshx - t.shx) * k;
           t.shy += (t.tshy - t.shy) * k;
           // 切片 / 点开过渡期间 CSS 正占用卡片的 transform，别写。
+          // 让位期间把「当前值」也按回中性：缓动这段时间仍在朝目标追，若不压住，
+          // 铺平那一帧会直接把已经收敛好的倾角一次性写上去 —— 卡面从平「啪」地斜过去。
+          // 停成 0 转角 / 1 缩放后，接回时自然从平卡缓入同一个 TILT_TAU。
           // 同时作废去重缓存：弯牌结束 flatSegs 会清掉卡片 inline transform，
           // 缓存不清的话回平后 tf === wtf 会跳过重写 → 鼠标不动倾斜就丢了。
           // 投影（.slot::before 吃 --tilt）也一并放平：影子归弯牌/过渡的状态管。
           if (t.slot.classList.contains('is-bent') || t.slot.classList.contains('pt-opening')) {
+            t.rx = t.ry = 0; t.sc = 1;
             t.wtf = '';
             if (t.live) { t.slot.style.setProperty('--tilt', 'none'); t.live = false; }
             continue;
