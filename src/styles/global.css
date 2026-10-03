@@ -758,18 +758,19 @@ footer.site {
 /* .article 就是那个 .wrap 容器（标记是 `class="wrap article"`），
    只负责上下留白 + 把纸面定宽；真正的纸是里层的 .paper。
    文章页比别的页宽：--measure 仍是 42rem（列表页/关于页保持窄栏），
-   这里单独开到 93.6rem（原 52rem × 1.8，用户要求加宽 80%）。 */
+   这里单独开到 84.2rem（52rem × 1.62；2026-10 先在 ×1.8 上试过，再收 10%）。 */
 .article {
   padding-top: 8rem;
   padding-bottom: 6rem;
-  width: min(93.6rem, calc(100vw - 3rem));
+  width: min(84.2rem, calc(100vw - 3rem));
 }
 .paper {
   background: var(--paper);
   color: var(--ink-2);
   border-radius: var(--card-r);
-  /* 文章页字体基准 ×1.5（16 → 24px）：正文、列表、KaTeX（1.21em）都跟着走 */
-  font-size: 1.5rem;
+  /* 文章页字体基准 1.2rem（19.2px）：正文、列表、KaTeX（1.21em）都跟着走。
+     ⚠ 下面那串 rem 字号全是它的同族倍数，调这一个就要回头一起调（×0.8 的来路见各条） */
+  font-size: 1.2rem;
   /* 左右内边距各占纸宽 20%（合计 40%，用户定的比例）；上下保持原来的 clamp */
   padding-block: clamp(2rem, 5.5vw, 5rem);
   padding-inline: 20%;
@@ -782,15 +783,15 @@ footer.site {
     0 18px 44px rgba(0, 0, 0, 0.6);
 }
 .article .meta {
-  font-size: 1.275rem;
+  font-size: 1.02rem;
   color: var(--ink-3);
   display: flex;
   gap: 1rem;
   margin-bottom: 2.5rem;
 }
-.prose h1 { font-size: clamp(2.85rem, 6vw, 4.2rem); line-height: 1.25; margin-bottom: 0.5em; color: var(--ink); }
-.prose h2 { font-size: 2.1rem; margin-top: 2.4em; color: var(--ink); }
-.prose h3 { font-size: 1.65rem; margin-top: 2em; color: var(--ink); }
+.prose h1 { font-size: clamp(2.28rem, 4.8vw, 3.36rem); line-height: 1.25; margin-bottom: 0.5em; color: var(--ink); }
+.prose h2 { font-size: 1.68rem; margin-top: 2.4em; color: var(--ink); }
+.prose h3 { font-size: 1.32rem; margin-top: 2em; color: var(--ink); }
 .prose p { color: var(--ink-2); }
 .prose a { color: var(--ink); border-bottom: 1px solid var(--paper-line); transition: border-color 0.3s, color 0.3s; }
 .prose a:hover { color: var(--accent); border-color: var(--accent); }
@@ -807,7 +808,7 @@ footer.site {
   border: 1px solid var(--paper-line);
   padding: 1rem 1.2rem;
   overflow-x: auto;
-  font-size: 1.3125rem;
+  font-size: 1.05rem;
   line-height: 1.7;
 }
 .prose pre code { background: none; border: none; padding: 0; }
@@ -816,7 +817,7 @@ footer.site {
   width: 100%;
   border-collapse: collapse;
   margin: 1.6em 0;
-  font-size: 1.23rem;
+  font-size: 0.984rem;
   line-height: 1.5;
 }
 .prose th,
@@ -851,7 +852,7 @@ footer.site {
   border-left: 2px solid var(--ink);
   color: var(--ink-3);
 }
-.backlink { color: var(--ink-3); font-size: 1.35rem; }
+.backlink { color: var(--ink-3); font-size: 1.08rem; }
 
 /* ============================================================
    阅读导引（只在文章详情页）
@@ -965,9 +966,11 @@ footer.site {
   transform: scaleX(0.0001);
 }
 
-/* 光球：正文里，落在当前标题的**左侧边距**（标题文字的左边），不在标尺上。
+/* 光球：正文里，紧贴标题文字的左边，不在标尺上。
    正圆，直径随标题层级递减（--rg-ball）。
-   定位：left 由 JS 按纸面位置算好写进来（固定定位，相对视口）；
+   ⚠ 不给发光：那两层大半径 box-shadow 是「光球」两个字带来的惯性，实际读起来只是脏。
+   只留一圈 1px 描边给它在白纸上一点边界感。
+   定位：left 由 JS 按纸面位置 + 当前球径算好写进来（固定定位，相对视口）；
    top 用 transform 的 --rg-y 推，逐帧只改 transform，不触发布局。 */
 .readguide__ball {
   position: fixed;
@@ -979,10 +982,7 @@ footer.site {
   background: var(--ink-red);
   transform: translate3d(0, var(--rg-y, 0px), 0) translate(-50%, -50%);
   will-change: transform;
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--ink-red) 45%, transparent),
-    0 0 18px 3px color-mix(in srgb, var(--ink-red) 55%, transparent),
-    0 0 52px 12px color-mix(in srgb, var(--ink-red) 22%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink-red) 45%, transparent);
 }
 
 /* 标尺要占左边那块空白：视口不够宽时（<860px 纸面几乎贴边）直接隐藏 */

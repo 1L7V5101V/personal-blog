@@ -76,6 +76,7 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
     const BALL_EASE = 0.06;   // 光球补间速率：越小越慢（时间常数 ≈ -16.7/ln(1-rate)）
                            // 0.12 → 约 160ms，0.06 → 约 325ms
     const BALL_MAX = 16, BALL_MIN = 7;   // 光球直径：最大层级 / 最小层级
+    const BALL_GAP = 12;   // 光球右缘到标题文字左边的空隙（贴着正文但不骑到字上）
     const PREFER = 28;        // 「更大层级优先」的判定距离
 
     // ---- 刻度生长（横线经过 / 鼠标悬停）----
@@ -219,15 +220,19 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       }
       track.replaceChildren(bodyStrip, frag);
 
-      // 光球的横向位置：纸面左内边距里，标题文字的左边
+      // 光球紧贴正文：右缘停在标题文字左边 BALL_GAP 处。left 是圆心（CSS 里
+      // translate(-50%) 居中），而球径随层级变，所以 left 跟着尺寸一起写在 update 里，
+      // 这里只存住那条「右缘该落在哪」的基准线。
       const padX = parseFloat(getComputedStyle(paper).paddingLeft) || 32;
-      ball.style.left = (paper.getBoundingClientRect().left + padX * 0.3).toFixed(1) + 'px';
+      ballEdge = paper.getBoundingClientRect().left + padX - BALL_GAP;
+      lastBall = -1;                       // 逼下一帧把尺寸和 left 一起重写
       rulerLeft = ruler.getBoundingClientRect().left;
     }
 
     let off = NaN;          // 刻度条位移，NaN = 首帧直接吸附
     let curY = NaN;          // 光球纵向位置，同上
     let lastBall = -1;
+    let ballEdge = 0;        // 光球右缘该落在的视口 x（layout 时量，见 BALL_GAP）
     let vh = innerHeight;
     let last = performance.now();
 
@@ -345,10 +350,13 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       const k = snap || !Number.isFinite(curY) ? 1 : 1 - Math.pow(1 - BALL_EASE, dt / 16.67);
       curY = snap || !Number.isFinite(curY) ? target : curY + (target - curY) * k;
 
-      // 尺寸只在这一刻的层级真的变了时才写：改 width 会触发重排 + 重画光晕
+      // 尺寸只在这一刻的层级真的变了时才写：改 width 是重排，每帧写就是每帧重排
+      // （left 也在这里跟着重写：球径变了，要贴着正文就得换圆心）
       if (a.level !== lastBall) {
         lastBall = a.level;
-        ball.style.setProperty('--rg-ball', ballSize(a.level).toFixed(1) + 'px');
+        const sz = ballSize(a.level);
+        ball.style.setProperty('--rg-ball', sz.toFixed(1) + 'px');
+        ball.style.left = (ballEdge - sz / 2).toFixed(1) + 'px';
       }
       ball.style.setProperty('--rg-y', curY.toFixed(2) + 'px');
     }
