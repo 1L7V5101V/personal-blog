@@ -78,6 +78,29 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
     const BALL_MAX = 16, BALL_MIN = 7;   // 光球直径：最大层级 / 最小层级
     const PREFER = 28;        // 「更大层级优先」的判定距离
 
+    // ---- 刻度生长（横线经过 / 鼠标悬停）----
+    // 焦点附近的刻度按高斯衰减往最长边长：L = base + (maxLen - base) * w。
+    // 生长用 transform: scaleX（origin 左端），不写 width —— 改 width 是
+    // 每帧重排，scaleX 只重绘一小块。池子必须罩住整个标尺窗口：
+    // 红线永远在窗口中心（进度映射），但鼠标悬停的焦点可以落在窗口里
+    // 离红线任意远的位置 —— 池子只盖红线附近的话，悬停就只对红线附近
+    // 的刻度起作用（踩过）。池子外还是 gradient 条 + 标题 <i>，池子刻度
+    // 在 w=1 时与底下静态刻度像素完全重合，不用显隐切换。
+    const GROW_SIGMA = 5;     // 衰减步长（条数），峰值在焦点、±5 条处剩 37%
+    const HOVER_REACH = 48;   // 标尺右缘再往右这么多 px 以内都算悬停区
+    const VEL_REF = 55;       // 滚动速度 → 生长幅度的满格点（px / 16.7ms）
+    const pool: HTMLElement[] = [];
+    const poolIdx: number[] = [];    // 池子元素当前对应的刻度下标，-1 = 未设
+    const poolBase: number[] = [];   // 同上，对应刻度的基础长度（scaleX 的分母）
+    let poolHalf = 0;                // 池子半径（条数），layout 里按窗口高算
+    let mx = -1, my = -1;            // 鼠标位置（pointermove 写，rAF 读）
+    let hoverAmt = 0;                // 悬停强度，往 0/1 缓动，进出不突跳
+    let rulerLeft = 0;               // 标尺左缘（--rg-x 的实际落点），layout 时量一次
+    let lastY = -1;                  // 上一帧 scrollY，算瞬时速度
+    let vSmooth = 0;                 // 平滑后的滚动速度（px/16.7ms），快攻慢放
+    let poolIdle = false;            // 全部缩回基础长度时置位，省掉逐帧 transform 写入
+    let maxScroll = 1;               // 文档可滚动量，scan 时量一次（进度映射的分母）
+
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     type Head = { level: number; el: HTMLElement; top: number; h: number };
@@ -106,13 +129,13 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
         const top = r.top + scrollY;
         if (/^H[1-6]$/.test(el.tagName)) {
           const level = Number(el.tagName[1]);
-          heads.push({ level, el, top, h: el.getBoundingClientRect().height });
+          heads.push({ level, el, top, h: r.height });
           ticks.push(level);
           tickY.push(top);
         } else {
           const n = el.tagName === 'PRE'
             ? Math.max(1, (el.textContent ?? '').split('\n').length)
-            : Math.max(1, Math.round(el.getBoundingClientRect().height / lineH));
+            : Math.max(1, Math.round(r.height / lineH));
           for (let i = 0; i < n; i++) {
             ticks.push(null);
             tickY.push(top + (i + 0.5) * lineH);
@@ -120,6 +143,7 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
         }
       }
       levels = [...new Set(heads.map((h) => h.level))].sort((a, b) => a - b);
+      maxScroll = Math.max(1, document.documentElement.scrollHeight - innerHeight);
     }
 
     // ---- 边长：固定两端 + 按层级数线性插值中间档 ----
@@ -151,16 +175,6 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       return a;
     }
 
-    // ---- 阅读位置对应的那条刻度（二分，tickY 单调递增）----
-    function cursorTick(ry: number) {
-      let lo = 0, hi = tickY.length - 1;
-      while (lo < hi) {
-        const mid = (lo + hi + 1) >> 1;
-        if (tickY[mid] <= ry) lo = mid; else hi = mid - 1;
-      }
-      return lo;
-    }
-
     function layout() {
       if (!ticks.length) return;
       // 最长边随视口收一收，窄屏上别撞到纸面
@@ -187,11 +201,28 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
         el.style.width = tickLen(lv).toFixed(2) + 'px';
         frag.appendChild(el);
       });
+      // 生长刻度池垫在最上面（w=1 时和静态刻度重合）。reduced-motion 下
+      // 不做生长，整池不建，update 里那段也整体跳过。
+      pool.length = 0; poolIdx.length = 0; poolBase.length = 0;
+      if (!reduced) {
+        // 池子半径盖住窗口半高再多 2 条：红线在窗口中心，悬停焦点
+        // 最远到窗口边缘，±2 条余量把高斯的尾巴也包进来
+        poolHalf = Math.ceil(winH / 2 / RG_GAP) + 2;
+        for (let k = 0; k < poolHalf * 2 + 1; k++) {
+          const el = document.createElement('i');
+          el.className = 'readguide__grow';
+          frag.appendChild(el);
+          pool.push(el);
+          poolIdx.push(-1);
+          poolBase.push(1);
+        }
+      }
       track.replaceChildren(bodyStrip, frag);
 
       // 光球的横向位置：纸面左内边距里，标题文字的左边
       const padX = parseFloat(getComputedStyle(paper).paddingLeft) || 32;
       ball.style.left = (paper.getBoundingClientRect().left + padX * 0.3).toFixed(1) + 'px';
+      rulerLeft = ruler.getBoundingClientRect().left;
     }
 
     let off = NaN;          // 刻度条位移，NaN = 首帧直接吸附
@@ -202,23 +233,107 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
 
     function update() {
       if (!heads.length) return;
+      // 视口高度变了但没收到 resize 事件（嵌入窗格里见过：窗格定尺寸不发
+      // resize，layout 在 0 高视口跑完就永远卡在 winH=0）—— 每帧比对一次，
+      // 整数比较不触发布局，变了就重量。
+      if (innerHeight !== vh) {
+        vh = innerHeight;
+        scan();
+        layout();
+        lastBall = -1;
+        curY = NaN;
+        off = NaN;
+        return;
+      }
       const now = performance.now();
       const dt = Math.min(64, now - last);
       last = now;
       const snap = reduced || !Number.isFinite(off);
 
-      // ---- 标尺：把「阅读位置对应的那条刻度」平移到窗口中线 ----
-      // ⚠ 符号：offset > 0 是把刻度条往下推。刻度条顶边对齐窗口顶边时
-      // （offset=0）刻度 0 在窗口顶部；要让第 i 条落到中线（距顶 winH/2），
-      // 得往上推 i*GAP - winH/2。写反了球会往屏幕外跑。
-      const ry = scrollY + vh / 2;
-      const maxOff = Math.max(0, ticks.length * RG_GAP - winH);
-      const want = Math.min(
-        Math.max(winH / 2 - cursorTick(ry) * RG_GAP, -maxOff),
-        0,
-      );
+      // ---- 标尺：红线在刻度条上的位置 = 滚动进度，两端钉死 ----
+      // 顶（scrollY=0）↔ tick 0、底（scrollY=maxScroll）↔ 最后一条刻度，
+      // 中间按滚动进度线性对应。用户的两个要求只能这样同时满足：
+      // 「最高点在红线上」+「红线指的刻度对应红线在正文的位置」——
+      // 刻度一比一对应正文行，文档纵向上刻度分布本来就近似均匀，
+      // 中段的行对应是精确的；若用「视口中线所在行」做映射，页面顶部
+      // 时红线指着首屏中间的行，第一条刻度永远到不了红线上（踩过）。
+      // ⚠ 符号：offset > 0 是把刻度条往下推。要让第 i 条落到中线
+      // （距顶 winH/2），得往上推 i*GAP - winH/2。写反了球会往屏幕外跑。
+      const fpos = Math.min(1, Math.max(0, scrollY / maxScroll)) * (tickY.length - 1);
+      const want = winH / 2 - fpos * RG_GAP;
       off = snap ? want : off + (want - off) * (1 - Math.pow(1 - 0.16, dt / 16.67));
       track.style.setProperty('--rg-off', off.toFixed(2) + 'px');
+
+      // ---- 刻度生长：幅度跟滚动速度走 ----
+      // 滑得越快鼓包越大，停下缩回基础长度；静止时标尺就是纯静态。
+      // 幅度 = 平滑速度归一，快攻慢放（起量跟手，拖尾 ~300ms）。
+      // 鼓包拖在横线后面那条尾巴不用额外做：轨道位移 off 本来就是
+      // lerp 平滑的，快速滑动时轨道落后于阅读位置，鼓包自然偏在后方。
+      // 鼠标悬停的幅度恒为满格，不需要速度。
+      if (pool.length) {
+        const vel = lastY < 0 ? 0 : (scrollY - lastY) / dt * 16.67;
+        lastY = scrollY;
+        vSmooth += (vel - vSmooth)
+          * (Math.abs(vel) > Math.abs(vSmooth) ? 0.5 : 1 - Math.pow(1 - 0.055, dt / 16.67));
+        const amp = Math.min(1, Math.abs(vSmooth) / VEL_REF);
+
+        // 悬停只在指针进到标尺横带（刻度条上任意高度）里生效，幅度恒为满格
+        const inZone = my >= 0 && mx >= rulerLeft - 12 && mx <= rulerLeft + maxLen + HOVER_REACH;
+        hoverAmt += ((inZone ? 1 : 0) - hoverAmt) * (1 - Math.pow(1 - 0.18, dt / 16.67));
+
+        if (amp < 0.01 && hoverAmt < 0.01) {
+          // 静止且无悬停：全部藏掉让静态刻度顶班，只写一次
+          if (!poolIdle) {
+            poolIdle = true;
+            for (const el of pool) el.style.transform = 'scaleX(0.0001)';
+          }
+        } else {
+          poolIdle = false;
+          // 鼠标的刻度坐标：视口 y 反推回刻度条坐标（标尺窗口顶 = vh/2 - winH/2）
+          const mpos = (my - (vh / 2 - winH / 2) - off) / RG_GAP;
+          // 滑得越快包络也越宽（0.75σ ~ 1.2σ）
+          const sig = GROW_SIGMA * (0.75 + 0.45 * amp);
+
+          const center = Math.round(fpos);
+          for (let k = 0; k < pool.length; k++) {
+            const i = center + k - poolHalf;
+            const el = pool[k];
+            if (i < 0 || i >= ticks.length) {
+              el.style.transform = 'scaleX(0.0001)';
+              continue;
+            }
+            if (poolIdx[k] !== i) {
+              poolIdx[k] = i;
+              const lv = ticks[i];
+              let base: number;
+              el.style.top = i * RG_GAP + 'px';
+              // 池子刻度全程不透明、颜色恒定：基部要整个盖住底下的静态刻度、
+              // 伸出去的部分要和基部同色，透明度一动就是一条刻度两截颜色
+              // （踩过一次）。所有刻度已统一为实色，生长只变长度。
+              if (lv === null) {
+                base = RG_MIN;
+                el.style.width = RG_MIN + 'px';
+                el.style.background = 'var(--fg-3)';
+              } else {
+                base = tickLen(lv);
+                el.style.width = base.toFixed(2) + 'px';
+                el.style.background = 'var(--fg-2)';
+              }
+              poolBase[k] = base;
+            }
+            const b = poolBase[k];
+            const w = Math.max(
+              amp * Math.exp(-(((i - fpos) / sig) ** 2)),
+              hoverAmt * Math.exp(-(((i - mpos) / GROW_SIGMA) ** 2)),
+            );
+            // 长度往最长边收：L = base + (maxLen - base) * w，换算成 scaleX 倍数。
+            // w≈0 时直接藏掉池子刻度，让底下静态刻度顶班 —— 省一笔重绘。
+            el.style.transform = w < 0.004
+              ? 'scaleX(0.0001)'
+              : 'scaleX(' + ((b + (maxLen - b) * w) / b).toFixed(4) + ')';
+          }
+        }
+      }
 
       // ---- 光球：严格跟随当前标题，不夹取 ----
       // 目标是该标题在视口里的垂直中心。标题一旦滚出屏幕顶端，球也跟着出去 ——
@@ -257,6 +372,10 @@ const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${S
       }, 140);
     });
     // 字体落地后行高会变，行数跟着变
-    document.fonts?.ready.then(() => { scan(); layout(); lastBall = -1; off = NaN; });
+    document.fonts?.ready.then(() => { (window as any).__rgDbg.fontN++; scan(); layout(); lastBall = -1; off = NaN; });
+
+    // 悬停生长：pointermove 只写两个数，读取都在 rAF 里（不碰布局）
+    addEventListener('pointermove', (e) => { mx = e.clientX; my = e.clientY; }, { passive: true });
+    document.documentElement.addEventListener('mouseleave', () => { mx = -1; my = -1; });
   }
 </script>

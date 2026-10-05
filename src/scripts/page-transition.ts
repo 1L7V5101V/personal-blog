@@ -186,8 +186,9 @@ function arrive() {
     .catch(() => {});
 }
 
-/** 返回方向：满屏白纸缩回卡片版位，再淡出交还页面 */
-function shrinkInto(rec: Rec) {
+/** 返回方向：满屏白纸缩回卡片版位，再淡出交还页面。release 由 backTo 传入，
+    动画结束/中断时解锁（finally 保证），保底计时器兜底。 */
+function shrinkInto(rec: Rec, release: () => void) {
   const el = document.querySelector<HTMLElement>(`[data-pt="${rec.pt}"]`);
   let x = rec.x,
     y = rec.y,
@@ -237,7 +238,7 @@ function shrinkInto(rec: Rec) {
     .then(() => paper.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, easing: 'ease-out', fill: 'forwards' }).finished)
     .then(() => cv.remove())
     .catch(() => cv.remove())
-    .finally(() => scrollLock(false));
+    .finally(() => release());
 }
 
 function backTo(rec: Rec) {
@@ -247,11 +248,20 @@ function backTo(rec: Rec) {
   window.dispatchEvent(new Event('pt-back'));
   scrollLock(true);
   setScroll(rec.sy);
+  // ⚠ 保底解锁：下面的释放链路依赖 rAF（settle 轮询）和 WAAPI finished，
+  // 而窗口被遮挡/隐藏时这两者都会暂停 —— 锁一旦卡住，Lenis 停转 +
+  // 滚轮全局 preventDefault，正文就永远滚不动。2.5s 后无条件放行
+  //（正常路径早就走完了，提前解锁由 finally 幂等覆盖）。
+  const bail = window.setTimeout(() => scrollLock(false), 2500);
+  const release = () => {
+    clearTimeout(bail);
+    scrollLock(false);
+  };
   // 等滚动真正停住再量卡片实时版位（Lenis immediate 也要一两帧才落定；白纸全程盖着）
   let n = 0;
   const settle = (lastY = scrollY) => {
     if (n >= 8 || Math.abs(scrollY - lastY) < 0.5) {
-      shrinkInto(rec);
+      shrinkInto(rec, release);
       return;
     }
     n++;

@@ -90,9 +90,64 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
      收益太小，去掉。要加效果先想清楚这里每帧多花多少。 */
   -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
-  /* 遮罩让背景和模糊一起渐隐：顶部实，往下化掉 */
-  -webkit-mask-image: linear-gradient(to bottom, #000 0 26%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0 26%, transparent 100%);
+  /* 遮罩让背景和模糊一起渐隐：顶部实，往下化掉。
+     多段停靠点走的是「先快后慢」的衰减（近似指数）：
+     线性渐变到末尾还剩一大截 alpha 就撞底边截断，会看到一条分割线；
+     尾端 alpha 贴着 0 走，边界就化没了。 */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0 16%,
+    rgba(0, 0, 0, 0.62) 40%,
+    rgba(0, 0, 0, 0.30) 60%,
+    rgba(0, 0, 0, 0.12) 76%,
+    rgba(0, 0, 0, 0.04) 88%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0 16%,
+    rgba(0, 0, 0, 0.62) 40%,
+    rgba(0, 0, 0, 0.30) 60%,
+    rgba(0, 0, 0, 0.12) 76%,
+    rgba(0, 0, 0, 0.04) 88%,
+    transparent 100%
+  );
+}
+
+/* ---------- 顶部遮罩 · 第二层（渐变模糊） ----------
+   上面那层的模糊半径是恒定的 5px，出遮罩的瞬间从「糊」跳到「清」，
+   即使 alpha 已经很低，内容细节上仍是一条对焦线。
+   这一层只模糊、不带底色，从主遮罩的中段淡入、以更小的半径
+   往下延伸再化掉 —— 模糊强度变成 5px→(叠 3px)→3px→0 的连续下滑，
+   末尾就不再有清晰度的突变。窄带 + 小半径，成本仍然可控。 */
+.topveil-soft {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 168px;
+  z-index: 38;              /* 垫在 .topveil(39) 之下 */
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  /* 顶部不让它出力（主遮罩已经糊了，叠两遍会把顶栏压得过糊）：
+     34% 前全透明，中段淡入到峰值，底部再化掉 */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0 34%,
+    rgba(0, 0, 0, 0.75) 54%,
+    rgba(0, 0, 0, 0.38) 74%,
+    rgba(0, 0, 0, 0.12) 90%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0 34%,
+    rgba(0, 0, 0, 0.75) 54%,
+    rgba(0, 0, 0, 0.38) 74%,
+    rgba(0, 0, 0, 0.12) 90%,
+    transparent 100%
+  );
 }
 
 /* ---------- 顶部导航 ---------- */
@@ -856,7 +911,6 @@ footer.site {
   top: 0;
   width: var(--rg-min, 22px);
   height: 100%;
-  opacity: 0.5;
   background: repeating-linear-gradient(
     to bottom,
     var(--fg-3) 0 1px,
@@ -869,6 +923,23 @@ footer.site {
   display: block;
   height: 1px;
   background: var(--fg-2);
+}
+/* 生长刻度池：横线/鼠标焦点附近的刻度往最长边长（JS 逐帧 scaleX）。
+   基础宽度由 JS 按当前下标写入（变下标才写），生长走 transform-origin
+   左端的 scaleX —— 改 width 是每帧重排，scaleX 只重绘一小块。
+   w=1 时与底下的静态刻度像素重合，所以池子常驻、不做显隐切换。
+   ⚠ 不要给池子刻度挂 will-change：1px 的小线一旦各自成层，就被 GPU
+   单独栅格化、单独采样，跟轨道层里静态渐变条的 1px 线不是同一条绘制
+   路径 —— 垂直差出零点几设备像素，基部错位叠成「粗一层」、长出的部分
+   细一层，还偶发整条丢失。并入轨道层同一条栅格化路径后完全一致。 */
+.readguide__grow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  height: 1px;
+  transform-origin: left center;
+  transform: scaleX(0.0001);
 }
 
 /* 光球：正文里，落在当前标题的**左侧边距**（标题文字的左边），不在标尺上。

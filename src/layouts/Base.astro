@@ -20,12 +20,9 @@ const EMAIL = 'hi@il7510n.dpdns.org'; // TODO: 换成真实邮箱
          ⚠ 高度要短（76px）：backdrop-filter 每帧都要对背板重新模糊，
          铺满一屏就是每帧重算全屏栅格 —— 项目里 dock 的 backdrop-filter
          就是因为这个删掉的。这条只覆盖顶部一条窄带。 -->
-    /* 顶部遮罩：最上面实底、往下渐变透明，带一点模糊。
-     给 ECG 和顶栏文字一条干净的「顶棚」，正文从底下化出来。
-     ⚠ 高度要短：backdrop-filter 每帧都要对背板重新模糊，
-     铺满一屏就是每帧重算全屏栅格 —— 项目里 dock 的 backdrop-filter
-     就是因为这个删掉的。这条只覆盖顶部一条窄带。 -->
     <div class="topveil" aria-hidden="true"></div>
+    <!-- 第二层渐变模糊：只模糊不带底色，把主遮罩末尾的「糊→清」突变接成连续下滑 -->
+    <div class="topveil-soft" aria-hidden="true"></div>
 
     <nav class="topnav">
       <a class="logo" href="/">il7510n</a>
@@ -54,19 +51,48 @@ const EMAIL = 'hi@il7510n.dpdns.org'; // TODO: 换成真实邮箱
 
       const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      // Lenis 惯性滚动（整站统一手感）
+      // Lenis 惯性滚动（整站统一手感）。
+      // ⚠ 隐藏/被遮挡的窗口里 rAF 不跑（ZCode 内置窗格甚至一直报 hidden），
+      // Lenis 劫持了滚轮、动画却永远跑不完 —— 滚轮就彻底失灵，正文滚不动。
+      // 所以页面不可见时摘掉 Lenis 让位给原生滚动，可见时再建回来
+      //（Lenis 构造时会读当前滚动值接管，不会打架）。
       let lenis: Lenis | null = null;
-      if (!reduced) {
+      function makeLenis() {
         lenis = new Lenis({ lerp: 0.12 });
+        (window as any).__lenis = lenis;
       }
-      // 暴露给页面脚本（首页自动播放入场需要程序化驱动滚动，且必须经由 Lenis 才不会被它抢回来）
-      (window as any).__lenis = lenis;
+      function dropLenis() {
+        lenis?.destroy();
+        lenis = null;
+        (window as any).__lenis = null;
+      }
+      if (!reduced && !document.hidden) {
+        makeLenis();
+      }
+      document.addEventListener('visibilitychange', () => {
+        if (reduced) return;
+        document.hidden ? dropLenis() : (lenis ?? makeLenis());
+      });
 
-      // 统一 rAF：各页面的滚动联动回调都挂到 __fx 上，这里统一驱动
+      // 统一 rAF：各页面的滚动联动回调都挂到 __fx 上，这里统一驱动。
+      // ⚠ 整段 try/catch：这里抛异常会静默杀死 rAF → 全页 fx 死、
+      // console 还常常抓不到（uncaught 不进 console API）。
+      // 捕获后存到 __fxErrs，循环继续跑，页面不至于整个瘫痪。
       (window as any).__fx = (window as any).__fx || [];
+      (window as any).__fxErrs = [];
       function raf(time: number) {
-        lenis?.raf(time);
-        for (const f of (window as any).__fx) f();
+        try {
+          lenis?.raf(time);
+          for (const f of (window as any).__fx) f();
+        } catch (e) {
+          const errs = (window as any).__fxErrs;
+          if (errs.length < 20) {
+            errs.push(
+              e instanceof Error ? `${e.message}\n${e.stack}` : String(e),
+            );
+          }
+          console.error('[fx]', e);
+        }
         requestAnimationFrame(raf);
       }
       requestAnimationFrame(raf);
