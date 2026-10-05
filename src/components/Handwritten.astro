@@ -1,0 +1,96 @@
+---
+/**
+ * 手写标题 —— 逐笔写出，不是打字机。
+ *
+ * 底层是 tegaki（MIT）：把任意字体的**填充轮廓**反推成**单线笔画 + 笔顺**，
+ * 再用 canvas 一笔一笔画出来。这里没有手画的 path，全部是生成器算的。
+ *
+ * ⚠ 三条踩过的坑，改之前先读：
+ *
+ * 1. **字体 bundle 有 276KB，必须裁。** caveat 的 bundle 里 `glyphData`（73KB）
+ *    按字符索引、`glyphDataById`（202KB）按字形 id 索引，**后者只有注册了
+ *    harfbuzz shaper 才会被读**（`shaped = !!shaper && !!font.glyphDataById`）。
+ *     latin 文字不注册 shaper 就永远走不到 byId —— 直接丢掉，只留用到的字符。
+ *    裁完 276KB → 十几 KB。
+ *
+ * 2. **每个 `<TegakiRenderer font={对象}>` 都会把整个 bundle 序列化进一个
+ *    `<script type="application/json">`**。同页多个实例 = 体积翻倍。
+ *    本组件内部只注册一次（`bundle` prop），实例按家族名引用。
+ *
+ * 3. **canvas 的位图不会被 cloneNode 复制。** 首页弯牌切片
+ *    （`.slot > .bend-seg`）会克隆卡片 11 份，克隆片上的这个 canvas 是空白的。
+ *    别把这个组件放进会被切片包裹的卡片里。
+ */
+import TegakiRenderer from 'tegaki/astro';
+import caveatFull from 'tegaki/fonts/caveat';
+
+const { text, speed = 5, loop = false, class: className = '' } = Astro.props as {
+  text: string;
+  speed?: number;
+  loop?: boolean;
+  class?: string;
+};
+
+type Bundle = typeof caveatFull;
+type AnyBundle = Bundle & Record<string, unknown>;
+
+/** 只保留这段文字用得到的字符。空格里也要留，否则排版宽度全错。 */
+function subset(bundle: Bundle, chars: string): AnyBundle {
+  const keep = new Set(chars);
+  const glyphData: Record<string, unknown> = {};
+  for (const [ch, data] of Object.entries(bundle.glyphData)) {
+    if (keep.has(ch)) glyphData[ch] = data;
+  }
+  return {
+    ...(bundle as AnyBundle),
+    glyphData,
+    // 没注册 shaper 就永远读不到它，丢掉省 202KB
+    glyphDataById: undefined,
+  };
+}
+
+const FAMILY = (caveatFull as unknown as { fullFamily: string }).fullFamily;
+const bundle = subset(caveatFull, text);
+const missing = [...text].filter((ch) => !(ch in bundle.glyphData));
+if (missing.length) {
+  // 别静默丢字 —— tegaki 的 CLI 也只是 warning，页面上就是少几个字符
+  console.warn(`[handwritten] bundle 里没有这些字符的笔画：${missing.join(' ')}`);
+}
+---
+
+{/*
+  loadFont：提前注入 @font-face。SSR 出来的 fallback 文字用的是真实字体的度量，
+  字体晚到会让纸面顶一下。少 integration 这一步 vite 不会在**服务端**解析字体
+  URL，回退字体的宽度和浏览器里对不上，文字会跳。
+*/}
+<TegakiRenderer font={bundle} bundle loadFont />
+
+<div class:list={['handwritten', className]}>
+  <TegakiRenderer
+    font={FAMILY}
+    text={text}
+    style="color: var(--ink-red)"
+    time={{ mode: 'uncontrolled', speed, loop }}
+    reducedMotion="user"
+  />
+</div>
+
+<style>
+  /* 文章页是黑场里的一张白纸，纸上只有黑 / 墨 / 红三个颜色。
+     这里用 --ink-red（印刷红，不发光）而不是 --accent —— 发光色是留给
+     画布上可交互信号的，纸面上的字不该亮。 */
+  .handwritten {
+    font-size: clamp(1.9rem, 6.5vw, 3.2rem);
+    line-height: 1.35;
+    margin: 0 0 1.6rem;
+    /* 画布是行内块，不给它块级上下文会把下面的 h1 吸上来 */
+    display: block;
+  }
+  /* 视口 < 860px 时 .readguide 整层隐藏，这段手写也退化成静态：
+     一行窄屏的手写标题在读之前就已经写完了，动画没有信息量。 */
+  @media (max-width: 860px) {
+    .handwritten {
+      font-size: clamp(1.5rem, 8vw, 2.2rem);
+    }
+  }
+</style>

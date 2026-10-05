@@ -3,6 +3,7 @@ import { defineConfig } from 'astro/config';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import tegaki from 'tegaki/astro/integration';
 
 // https://astro.build/config
 export default defineConfig({
@@ -13,4 +14,8 @@ export default defineConfig({
     rehypePlugins: [rehypeKatex],
     shikiConfig: { theme: 'github-light' },
   },
+  // 手写标题（src/components/Handwritten.astro）。这个 integration 只做一件事：
+  // 让 Vite 在**服务端**也能解析字体 bundle 里的 ttf URL —— 不然 SSR 出来的
+  // fallback 字体宽度和浏览器里的不一致，文字会跳一下。见 tegaki.ink 的 Astro 指南。
+  integrations: [tegaki()],
 });
