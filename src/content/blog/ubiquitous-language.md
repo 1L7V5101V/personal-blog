@@ -1,7 +1,7 @@
 ---
 title: Ubiquitous Language —— 硅光挠曲电统一记号表
 date: 2026-08-20
-tag: 笔记
+column: test
 ---
 
 > 示例文章：拿来验阅读导引的标尺分档。这篇有 h1 / h2 / h3 **三层齐全**，

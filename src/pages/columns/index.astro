@@ -1,0 +1,25 @@
+---
+import Base from '../../layouts/Base.astro';
+import { COLUMNS } from '../../data/columns';
+import { allPosts, postsIn } from '../../lib/posts';
+
+// 栏目只在 src/data/columns.ts 里定义，这一页就是那张注册表（顺序也来自它）。
+const posts = await allPosts();
+const rows = COLUMNS.map((c) => ({ ...c, n: postsIn(posts, c.slug).length }));
+---
+<Base title="栏目 · il7510n">
+  <section class="wrap pagehead">
+    <h1 data-reveal style="--i:0">栏目</h1>
+    <p class="count" data-reveal style="--i:1">共 {rows.length} 个</p>
+  </section>
+  <section class="wrap">
+    <div class="list">
+      {rows.map((c, i) => (
+        <a class="row" data-io style={`--i:${i % 4}`} href={`/columns/${c.slug}/`} data-pt={`col:${c.slug}`}>
+          <span class="t">{c.name}</span>
+          <span class="m">{c.n} 篇</span>
+        </a>
+      ))}
+    </div>
+  </section>
+</Base>

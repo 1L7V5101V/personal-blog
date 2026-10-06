@@ -1,13 +1,11 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { getCollection } from 'astro:content';
+import { allPosts, columnName, fmtDate, updatedAt } from '../../lib/posts';
 
-const posts = (await getCollection('blog')).sort(
-  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
-);
-const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+// 全部文章，按各篇的最后更新时间倒序（栏目名只是标一下它属于哪一栏）
+const posts = await allPosts();
 ---
-<Base title="文章 · il7510n" path="/blog/">
+<Base title="文章 · il7510n">
   <section class="wrap pagehead">
     <h1 data-reveal style="--i:0">文章</h1>
     <p class="count" data-reveal style="--i:1">共 {posts.length} 篇</p>
@@ -17,15 +15,9 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
       {posts.map((p, i) => (
         <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>
           <span class="t">{p.data.title}</span>
-          <span class="m">{p.data.tag} · {fmt(p.data.date)}</span>
+          <span class="m">{columnName(p.data.column)} · {fmtDate(updatedAt(p))}</span>
         </a>
       ))}
     </div>
   </section>
 </Base>
-
-<style>
-  .pagehead { padding-top: 16vh; padding-bottom: 3rem; }
-  .pagehead h1 { font-size: clamp(2.4rem, 6vw, 4rem); margin: 0; }
-  .count { color: var(--fg-3); font-size: 0.9rem; }
-</style>

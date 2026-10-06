@@ -1,7 +1,7 @@
 ---
 title: 让字体自己写出笔顺
 date: 2026-10-03
-tag: 图形
+column: test
 handwritten: Handwriting, not typing.
 ---
 

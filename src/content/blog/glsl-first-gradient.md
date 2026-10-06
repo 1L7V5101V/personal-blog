@@ -1,7 +1,7 @@
 ---
 title: GLSL 入门笔记：从一张渐变开始
 date: 2026-09-20
-tag: 图形
+column: test
 cover: /img/p3.jpg
 depth: /img/p3-depth.webp
 ---

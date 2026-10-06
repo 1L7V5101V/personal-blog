@@ -1,7 +1,7 @@
 ---
 title: 把 Lusion 的滑动效果拆开看
 date: 2026-10-01
-tag: 前端
+column: test
 cover: /img/p2.jpg
 depth: /img/p2-depth.webp
 ---

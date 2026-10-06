@@ -347,16 +347,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 /* 卡片自己不带任何 box-shadow（外投影会被切片裁掉，见上），也不加 border/outline：
    那会让卡片比槽位小 2px，破坏「槽位与卡 rect 完全一致」这个前提。
    黑场上卡与背景的区分靠两个东西：卡面比画布亮一档（#141416 vs #0b0b0c）+ 槽位那圈黑投影。 */
-.slot .tag {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  margin-bottom: 0.55rem;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  color: var(--fg-3);
-  white-space: nowrap;
-}
 
 /* ---------- 卡片几何纹理 ----------
    全站只有黑 / 白 / 红三个颜色，几何全部用 background-image 的渐变叠层画出来：
@@ -602,13 +592,34 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   /* 同上：不写 background 简写，否则 geo-* 的 background-image 被清空 */
   overflow: hidden;
 }
-.poster .pword {
+/* 栏目卡上那行巨型字：海报卡（.poster）和图片卡（.hcard 里的 .imgbox）共用一套。
+   选择器挂在 .slot 上是因为弯牌切片时字也在克隆片里，克隆片和卡片同为 .slot 的后代。 */
+.slot .pword {
   position: absolute;
-  left: 50%;
-  bottom: -7%;
+  --cardw: min(75vw, 76rem);
+  /* 左右留白：字不贴着卡边。这个值同时被 JS 读走（滚动行程 = 名字宽 − 卡宽 + 2×pad），
+     所以留白只有这一处出处。 */
+  --pad: calc(var(--cardw) * 0.05);
+  /* 左边从留白处起（不是居中）：名字比卡宽得多，静止在 --pan: 0 时看到的就是开头 ——
+     移动端 / reduced-motion 不跑 fx，天然停在「看得到名字开头」那一帧，不会露出中间半截。 */
+  left: var(--pad);
+  /* 底边位置由「墨迹」反推，不由行框：墨迹块（最高一笔→最低一笔）= 70% 卡高，
+     上边距 20% 卡高、下边距 10%（上面留得比下面宽）。
+     行框比墨迹松（line-height .82 叠 Arial 的 ascent/descent），换算成
+     bottom = (1 − 上边距) / 字高占比 × --name-h − 0.7795 = 1.1429 × --name-h − 0.7795（em）。
+     不带下伸部的名字算出来接近 0 —— 行框底边几乎压在卡边上，但墨迹在卡里，裁不到字。
+     从前这里是 bottom: -7%（占卡高）：那是给「写」「拆」这种单个汉字设计的，
+     拉丁小写字母的「底」就是基线，按 -7% 会整条削掉字脚。 */
+  bottom: calc(1.1429em * var(--name-h, 0.716) - 0.7795em);
   z-index: 1;
-  transform: translateX(calc(-50% + var(--pan, 0px)));
-  font-size: clamp(9rem, 22vw, 22rem);
+  transform: translateX(var(--pan, 0px));
+  /* 字号按卡高定，不管名字有多宽：卡高 = 卡宽 × 9/16，墨迹块占满它的 70%。
+     --name-h = 这行名字的墨迹合多少 em（拉丁大写/上伸 0.716，带 y p g q j → 0.928，
+     中日韩整字 0.88），由卡片 inline 给；它是 CSS 变量 → 继承进 11 条切片克隆，
+     弯牌时字仍然同步（同 --pan 的道理）。
+     ⚠ 别在这里再声明一遍 --name-h 给默认值：自己声明会盖掉从卡片继承来的那份。
+     ⚠ 名字因此普遍比卡宽（LeetCode = 2.94 倍卡宽）—— 靠 --pan 滚过卡面读完。 */
+  font-size: calc(var(--cardw) * 9 / 16 * 0.7 / var(--name-h, 0.716));
   font-weight: 650;
   letter-spacing: -0.05em;
   line-height: 0.82;
@@ -617,6 +628,12 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
      11 条切片才永远同步 —— 别改成 inline transform。 */
   color: var(--card-fg);
   text-shadow: 5px 5px 0 var(--ink-red);
+}
+/* 图片卡上那行名字改走白漆，并且浮在渐暗之上：
+   .imgbox::after 那道底部渐暗（z-index 2）本来是压在标题上的，黑字落进暗底就直接没了。 */
+.hcard .pword {
+  color: var(--white);
+  z-index: 3;
 }
 .poster .pdot {
   width: 48%;
@@ -660,6 +677,11 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 
 
 /* ---------- 文章列表 ---------- */
+/* 列表页页头（文章 / 栏目 / 栏目内页共用）：超大标题 + 一行计数 */
+.pagehead { padding-top: 16vh; padding-bottom: 3rem; }
+.pagehead h1 { font-size: clamp(2.4rem, 6vw, 4rem); margin: 0; }
+.count { color: var(--fg-3); font-size: 0.9rem; }
+
 .list { display: flex; flex-direction: column; }
 .row {
   display: flex;
@@ -1088,6 +1110,8 @@ html.pt-arrive .article {
     scale: 0.52;
     transform-origin: center right;
   }
+  /* 小屏卡宽是 88vw，栏目名的字号按这个宽度算 */
+  .slot .pword { --cardw: 88vw; }
 }
 
 /* ---------- reduced motion ---------- */

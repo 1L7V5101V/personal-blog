@@ -1,6 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
 import { getCollection, render } from 'astro:content';
+import { columnName, fmtDate, updatedAt } from '../../lib/posts';
 // KaTeX 按页引入：只有文章页需要公式，不往首页/列表页发
 import 'katex/dist/katex.min.css';
 
@@ -18,17 +19,17 @@ const { Content } = await render(post);
 const Handwritten = post.data.handwritten
   ? (await import('../../components/Handwritten.astro')).default
   : null;
-const d = post.data.date;
-const fmt = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+// 这篇属于哪个栏目（栏目名查 src/data/columns.ts），以及它的最后更新时间
+const colName = columnName(post.data.column);
+const fmt = fmtDate(updatedAt(post));
 ---
 <Base title={`${post.data.title} · il7510n`} description={post.data.title} path={`/blog/${post.id}/`}>
   <div class="wrap article">
     <article class="prose paper">
-      <a class="backlink u" href="/blog/" data-backlink>← 全部文章</a>
+      <a class="backlink u" href={`/columns/${post.data.column}/`} data-backlink>← {colName}</a>
       {Handwritten && post.data.handwritten && <Handwritten text={post.data.handwritten} />}
       <div class="meta">
         <span>{fmt}</span>
-        <span>{post.data.tag}</span>
       </div>
       <h1>{post.data.title}</h1>
       <Content />

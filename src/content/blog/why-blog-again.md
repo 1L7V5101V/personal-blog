@@ -1,7 +1,7 @@
 ---
 title: 为什么我又开始写博客了
 date: 2026-10-02
-tag: 随笔
+column: test
 cover: /img/p1.jpg
 depth: /img/p1-depth.webp
 ---

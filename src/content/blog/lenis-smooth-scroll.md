@@ -1,7 +1,7 @@
 ---
 title: 惯性滚动的手感是怎么调出来的
 date: 2026-09-15
-tag: 前端
+column: test
 cover: /img/p4.jpg
 depth: /img/p4-depth.webp
 ---

@@ -2,11 +2,15 @@ import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
 
 const blog = defineCollection({
-  loader: glob({ pattern: '**/*.md', base: './src/content/blog' }),
+  loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/blog' }),
   schema: z.object({
     title: z.string(),
     date: z.coerce.date(),
-    tag: z.string().default('随笔'),
+    // 这篇文章属于哪个栏目（值是 src/data/columns.ts 里的 slug）。必填：没有栏目的文章进不去。
+    column: z.string(),
+    // 最后更新时间。不填就按 date 算（见 src/lib/posts.ts 的 updatedAt）。
+    // 站上编辑器以后改的就是这个字段。
+    updated: z.coerce.date().optional(),
     cover: z.string().optional(),
     // 手写标题（可选）：写了就渲染 Handwritten.astro，逐笔写出来。
     // 必须在这里声明，否则会被静默丢掉（下面那个 z.object 不开passthrough）。

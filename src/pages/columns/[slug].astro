@@ -1,0 +1,33 @@
+---
+import Base from '../../layouts/Base.astro';
+import { COLUMNS } from '../../data/columns';
+import { allPosts, postsIn, fmtDate, updatedAt } from '../../lib/posts';
+
+// 栏目页 = 这个栏目下的文章列表。栏目本身只在 src/data/columns.ts 里定义，
+// 这里按注册表批量出页；文章归属靠 frontmatter 的 column 字段，加文章不用动这个文件。
+export async function getStaticPaths() {
+  const posts = await allPosts();
+  return COLUMNS.map((col) => ({
+    params: { slug: col.slug },
+    props: { col, posts: postsIn(posts, col.slug) },
+  }));
+}
+
+const { col, posts } = Astro.props;
+---
+<Base title={`${col.name} · il7510n`}>
+  <section class="wrap pagehead">
+    <h1 data-reveal style="--i:0">{col.name}</h1>
+    <p class="count" data-reveal style="--i:1">共 {posts.length} 篇</p>
+  </section>
+  <section class="wrap">
+    <div class="list">
+      {posts.map((p, i) => (
+        <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>
+          <span class="t">{p.data.title}</span>
+          <span class="m">{fmtDate(updatedAt(p))}</span>
+        </a>
+      ))}
+    </div>
+  </section>
+</Base>

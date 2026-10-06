@@ -1,12 +1,39 @@
 ---
 import Base from '../layouts/Base.astro';
-import { getCollection } from 'astro:content';
+import { COLUMNS } from '../data/columns';
+import { allPosts, postsIn, columnName, fmtDate, updatedAt } from '../lib/posts';
 
-const posts = (await getCollection('blog')).sort(
-  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
-);
-const featured = posts.slice(0, 2);
-const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+// 首页的卡片就是栏目：注册表里的栏目一个一张卡，顺序 = 从左到右。
+// 卡面那行超大粗体字 = 栏目名，一个字都不用另写。
+// 几何纹理按顺序轮转（三条母题：网格 / 同心圆环 / 斜切+半调），墨色空心圈跟着圆环那张走。
+const GEO = ['geo-grid', 'geo-rings', 'geo-split'];
+/**
+ * 这行名字的墨迹有多高（单位 em：从最高一笔到最低一笔）。字号按卡高定，墨迹高度就是它。
+ * 实测 Arial 粗体：大写 / 上伸部到基线 0.716em，`y p g q j` 的尾巴到基线下 0.212em，
+ * 中日韩整字约 0.88em。名字带下伸部时整块更高，字就相应小一点 —— 否则那条尾巴得出卡。
+ */
+const nameInkEm = (s: string) => {
+  if ([...s].some((ch) => ch.codePointAt(0)! >= 0x2e80)) return 0.88;
+  return /[gjpqy]/.test(s) ? 0.928 : 0.716;
+};
+// 最后一张卡：全部文章，按各篇的最后更新时间倒序
+const posts = await allPosts();
+let gi = 0;   // 海报卡的几何轮转指针（图片卡不参与轮转）
+const homeCols = COLUMNS.map((c) => {
+  // 卡面的照片 = 这一栏里最新一篇带 cover 的文章的封面（深度图跟着一起带过来）。
+  // 一篇带封面的都没有 —— 退回纯字的海报卡。
+  const art = postsIn(posts, c.slug).find((p) => p.data.cover);
+  const g = gi % GEO.length;
+  if (!art) gi++;
+  return {
+    ...c,
+    cover: art?.data.cover,
+    depth: art?.data.depth,
+    geo: art ? 'geo-img-band' : GEO[g],
+    ink: !art && g === 1,
+    nameH: nameInkEm(c.name),   // 字号按它算，见 global.css 的 .slot .pword
+  };
+});
 ---
 <Base ecgMode="strip">
   <!-- 首页自带入场秀：刷新时不要让浏览器恢复滚动位置（否则会错过开场，或被中途的位置卡住） -->
@@ -54,71 +81,64 @@ const fmt = (d: Date) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart
           </a>
         </section>
 
-        <!-- 2 · 图片卡（悬停虚化） -->
-        {featured.map((p, i) => (
-          <div class="slot">
-            <a
-              class={`hcard ${i === 0 ? 'geo-img-band' : 'geo-img-corner'}`}
-              href={`/blog/${p.id}/`}
-              aria-label={p.data.title}
-              data-pt={`card:${p.id}`}
-            >
-              <figure>
-                <div class="imgbox">
-                  {p.data.cover && <img src={p.data.cover} alt="" loading="lazy" />}
-                  {/* 视差画布：鼠标在图上移动时按深度图逐像素偏移取样（真视差，不是整张卡刚性倾斜）。
-                      没有 depth 的封面就不渲染，退回纯 <img>。 */}
-                  {p.data.depth && (
-                    <canvas class="fdpt" data-depth={p.data.depth} aria-hidden="true"></canvas>
-                  )}
-                </div>
-              </figure>
-            </a>
+        <!-- 2 · 栏目卡（一栏一张，卡面就是栏目名）。这一栏有带封面的文章 → 图片卡
+             （悬停散焦→对焦 + 深度图视差）；没有 → 纯字海报卡。两种卡的字号走同一套规则。 -->
+        {homeCols.map((c) => (
+          <div class="slot pslot">
+            {c.cover ? (
+              <a
+                class={`hcard ${c.geo}`}
+                href={`/columns/${c.slug}/`}
+                aria-label={c.name}
+                data-pt={`col:${c.slug}`}
+                style={`--name-h:${c.nameH}`}
+              >
+                <figure>
+                  <div class="imgbox">
+                    <img src={c.cover} alt="" loading="lazy" />
+                    {/* 视差画布：配了深度图才挂，没有就退回纯 <img> */}
+                    {c.depth && <canvas class="fdpt" data-depth={c.depth} aria-hidden="true"></canvas>}
+                    <span class="pword">{c.name}</span>
+                  </div>
+                </figure>
+              </a>
+            ) : (
+              <a
+                class={`poster ${c.geo}`}
+                href={`/columns/${c.slug}/`}
+                aria-label={c.name}
+                data-pt={`col:${c.slug}`}
+                style={`--name-h:${c.nameH}`}
+              >
+                <span class={`dot pdot${c.ink ? ' dot-ink' : ''}`} style="width: 34%; right: 5%; top: 10%;"></span>
+                <span class="pword">{c.name}</span>
+              </a>
+            )}
           </div>
         ))}
 
-        <!-- 3 · 字体海报卡（巨型裁切文字 + 色块圆；过中心后爆发加速） -->
-        <div class="slot pslot">
-          <a class="poster geo-grid" href="/blog/why-blog-again/" data-pt="poster:why-blog-again">
-            <span class="dot pdot" style="width: 34%; right: 5%; top: 10%;"></span>
-            <span class="pword">写</span>
-          </a>
-        </div>
-        <div class="slot pslot">
-          <a class="poster geo-rings" href="/blog/deconstruct-lusion-scroll/" data-pt="poster:deconstruct-lusion-scroll">
-            <span class="dot dot-ink pdot" style="width: 34%; right: 5%; top: 10%;"></span>
-            <span class="pword">拆</span>
-          </a>
-        </div>
-        <div class="slot pslot">
-          <a class="poster geo-split" href="/blog/lenis-smooth-scroll/" data-pt="poster:lenis-smooth-scroll">
-            <span class="dot pdot" style="width: 30%; right: 5%; top: 12%;"></span>
-            <span class="pword">100%</span>
-          </a>
-        </div>
-
-        <!-- 4 · 全部文章：白卡 -->
+        <!-- 3 · 全部文章：白卡，按最后更新时间倒序 -->
         <section class="slot listpanel">
           <div class="listpanel-card geo-frame">
             <div class="list">
-              {posts.map((p, i) => (
+              {posts.map((p) => (
                 <a class="row" href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>
                   <span class="t">{p.data.title}</span>
-                  <span class="m">{p.data.tag} · {fmt(p.data.date)}</span>
+                  <span class="m">{columnName(p.data.column)} · {fmtDate(updatedAt(p))}</span>
                 </a>
               ))}
             </div>
           </div>
         </section>
 
-        <!-- 5 · 宣言：直接写在画布上 -->
+        <!-- 4 · 宣言：直接写在画布上 -->
         <section class="panel manifesto">
           <p data-io style="--i:0">把字写清楚。</p>
           <p data-io style="--i:1">把代码写简单。</p>
           <p data-io style="--i:2">把东西做久。</p>
         </section>
 
-        <!-- 6 · 到头了 -->
+        <!-- 5 · 到头了 -->
         <section class="panel endpanel">
           <p class="big" data-io style="--i:0">到头了。</p>
         </section>
@@ -465,12 +485,11 @@ void main(){
 
     // 开场牌堆（拉牌入场落到屏幕中心：hero 正中最上、其余随机角度+微偏移堆叠）+ 滚轴变形
     const fanEls = [...track.querySelectorAll(':scope > .slot')];
-    const fanTags = fanEls.map((e) => e.querySelector<HTMLElement>('.tag'));
     const N = fanEls.length;
     let prevConveyor = 0, vSmooth = 0, cylOn = false;
     let slotY = 0, slotH = 0, slotW = 0;
     let slotLeft: number[] = [];   // 每张牌的布局位置：缓存起来，免得每帧读 offsetLeft 把样式计算/重排反复触发
-    let posterW: number[] = [], posterLeft: number[];   // 海报卡同理（字内滑动要用，但布局量不必每帧读）
+    let posterW: number[] = [], posterLeft: number[], posterTextW: number[], posterPad: number[];   // 海报卡同理（字内滑动要用，但布局量不必每帧读）
     const lastPan: number[] = [];                       // --pan 上次写入的值（量化去重，避免每帧无谓重绘）
     const measureFan = () => {
       // 先清掉 fx 设的 transform 再量，否则会量到飞行中的位置（入场由滚动驱动时尤其如此）
@@ -483,6 +502,13 @@ void main(){
       panEnd = slotLeft.length > 1 ? slotLeft[1] + slotW / 2 - innerWidth / 2 : 0;
       posterW = posters.map((e) => e.offsetWidth);
       posterLeft = posters.map((e) => e.offsetLeft);
+      // 名字有多宽：按卡高定完字号之后，它普遍大于卡宽，超出的那一截就是要滚的行程
+      posterTextW = posters.map((e) => e.querySelector<HTMLElement>('.pword')?.offsetWidth ?? 0);
+      // 卡面左右留白由 CSS 的 --pad 定（.slot .pword 的 left），这里现读，不重写一遍数值
+      posterPad = posters.map((e) => {
+        const w = e.querySelector<HTMLElement>('.pword');
+        return w ? parseFloat(getComputedStyle(w).left) || 0 : 0;
+      });
       // 展开期要推进的距离：直接把第 2 张卡的中心对到屏幕中心（用测出来的，别用「一张牌间距」算——
       // 牌堆是按卡片在屏幕居中摆的，而轨道布局左边有 padding-inline，两者差着半个 padding）
     };
@@ -795,8 +821,6 @@ void main(){
           } else {
             bendCols(i, null);
           }
-          const tg = fanTags[i];
-          if (tg) tg.style.opacity = '';
           return;
         }
         bendCols(i, null); // 入场段用 rows 卷曲，这里确保没有残留的曲面屏分段
@@ -835,13 +859,17 @@ void main(){
       // 写 inline 的话只有本体在动，克隆拿的是旧快照 → 字会被切成错位的几片。
       for (let i = 0; i < posters.length; i++) {
         const el = posters[i];
-        const w = posterW[i], left = posterLeft[i];
+        const w = posterW[i], left = posterLeft[i], tw = posterTextW[i], pad = posterPad[i] || 0;
         if (!w) continue;
         const sEnter = left - innerWidth;
         const sCenter = left + w / 2 - innerWidth / 2;
         const prog = sCenter > sEnter ? Math.min(1, Math.max(0, (STrack - sEnter) / (sCenter - sEnter))) : 1;
+        // 栏目名的字号按卡高定，所以普遍比卡面宽 —— 让名字横向滚过卡面这扇窗，从开头读到末尾：
+        // prog=0（卡刚进屏）→ --pan 0，名字的开头站在左留白上；prog=1（卡到屏心）→ 正好滚完
+        // 超出的那一截，名字的末尾停在右留白上。之后冻结（同从前）。
+        const over = Math.max(0, (tw || 0) - w + pad * 2);
         // 量化到 0.5px 再比较：变量一变，11 条切片里的字就都要重绘；慢慢滚时每帧挪不到 1px，没必要每帧都刷
-        const pan = Math.round((0.10 - 0.26 * prog) * w * 2) / 2;
+        const pan = -Math.round(over * prog * 2) / 2;
         if (pan !== lastPan[i]) { el.style.setProperty('--pan', `${pan}px`); lastPan[i] = pan; }
       }
 
