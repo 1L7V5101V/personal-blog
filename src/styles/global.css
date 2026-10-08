@@ -36,6 +36,13 @@
   --paper-line: #dde5ea;
   --card-r: clamp(36px, 4.4vw, 60px); /* Apple 式大圆角（2026-10 用户要求 ×2，原 clamp(18px, 2.2vw, 30px)） */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 内容进场的三个数，全站共用一套：以前 [data-reveal] 是 0.8s / 90ms / 16px，
+     [data-io] 是 0.9s / 80ms / 20px —— 同一条曲线、同一件事（升起落位），三个数各差一点，
+     于是 /blog/ 上页头走 reveal、下面的行走 io，错峰按 90 和 80 交错、落地用 800 和 900，
+     永远合不成一个节奏。 */
+  --dur-in: 0.8s;
+  --stagger: 80ms;
+  --rise: 16px;
   --measure: 42rem;
 }
 
@@ -164,10 +171,12 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
 .topnav .logo { font-weight: 650; letter-spacing: -0.02em; }
 .topnav .links { display: flex; gap: 1.25rem; font-size: 0.9rem; color: var(--fg-2); }
 
-/* 链接下划线展开 */
+/* 链接下划线展开。一次悬停只做一件事：字变亮和线扫出来同时开始、同时结束，
+   所以两者共用同一个时长和同一条曲线 —— 以前一个是 0.3s 的默认 ease，
+   一个是 0.45s 的 token，字红完 150ms 之后线还没走完。 */
 .u {
   position: relative;
-  transition: color 0.3s;
+  transition: color 0.24s var(--ease-out);
 }
 .u::after {
   content: "";
@@ -177,29 +186,31 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   background: currentColor;
   transform: scaleX(0);
   transform-origin: right;
-  transition: transform 0.45s var(--ease-out);
+  transition: transform 0.24s var(--ease-out);
 }
 .u:hover { color: var(--fg); }
 .u:hover::after { transform: scaleX(1); transform-origin: left; }
 
 /* ---------- 进场 stagger ---------- */
+/* 两套触发方式（loaded 一次性 / IntersectionObserver 逐批），但只有进场这一件事，
+   所以时长、错峰、升起的高度都取自上面那三个 token。 */
 [data-reveal] {
   opacity: 0;
-  transform: translateY(16px);
+  transform: translateY(var(--rise));
   transition:
-    opacity 0.8s var(--ease-out),
-    transform 0.8s var(--ease-out);
-  transition-delay: calc(var(--i, 0) * 90ms);
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out);
+  transition-delay: calc(var(--i, 0) * var(--stagger));
 }
 body.loaded [data-reveal] { opacity: 1; transform: none; }
 
 [data-io] {
   opacity: 0;
-  transform: translateY(20px);
+  transform: translateY(var(--rise));
   transition:
-    opacity 0.9s var(--ease-out),
-    transform 0.9s var(--ease-out);
-  transition-delay: calc(var(--i, 0) * 80ms);
+    opacity var(--dur-in) var(--ease-out),
+    transform var(--dur-in) var(--ease-out);
+  transition-delay: calc(var(--i, 0) * var(--stagger));
 }
 [data-io].in { opacity: 1; transform: none; }
 
@@ -275,11 +286,14 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 }
 /* 完全展开后的 journey 段：悬停放大整个退场（堆叠阶段保留）。
    .deck-unfolded 由 JS 随展开进度挂到 .journey 上（见 index.astro 的 deckUnfolded）。
-   图片卡的散焦/对焦、深度视差不在此列，照常生效 —— 只放大不去。 */
+   图片卡的散焦/对焦、深度视差不在此列，照常生效 —— 只放大不去。
+   卡面上那颗圆也一起退场：以前这条只管卡片自己的 transform，圆是它的子元素，
+   所以牌堆摊开之后别的放大都没了、唯独那颗圆还在每次掠过时弹一下。 */
 .journey.deck-unfolded .slot:hover .hero-card,
 .journey.deck-unfolded .slot:hover .hcard,
 .journey.deck-unfolded .slot:hover .poster,
-.journey.deck-unfolded .slot:hover .listpanel-card {
+.journey.deck-unfolded .slot:hover .listpanel-card,
+.journey.deck-unfolded .slot:hover .poster .pdot {
   transform: none;
 }
 
@@ -667,10 +681,15 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   right: 7%;
   top: 9%;
   z-index: 0;
-  transition: transform 0.6s var(--ease-out);
+  /* 0.6s 是全站最长的悬停反馈，超出一倍预算：同一张卡上的倾斜跟随时间常数是 0.13s，
+     这颗圆要比它慢四五倍才跟到位，读起来像是卡住了。收到 0.3s。 */
+  transition: transform 0.3s var(--ease-out);
 }
 @media (hover: hover) {
-  .poster:hover .pdot { transform: scale(1.14); }
+  /* 悬停状态挂在 .slot，不挂在 .poster 上：弯牌时卡片本体只是 11 条切片里的中条，
+     克隆片是 pointer-events:none 的副本、匹配不到 :hover，于是只有中条那颗圆会放大，
+     圆在接缝处断成两截。槽位是本体和克隆的共同祖先。 */
+  .slot:hover .poster .pdot { transform: scale(1.14); }
 }
 
 /* 列表面板：与其他卡同尺寸的白卡 */
@@ -722,7 +741,9 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   border-bottom: 1px solid var(--hairline);
 }
 .row:first-child { padding-top: 0.2rem; }
-.row .t { font-weight: 600; font-size: 1.08rem; }
+/* 红是全站唯一的可交互信号色，所以这一行的反馈必须和顶栏那套同时长同曲线：
+   以前这里一条 transition 都没写，读者用得最多的页面上「变红」是 0ms 硬跳。 */
+.row .t { font-weight: 600; font-size: 1.08rem; transition: color 0.24s var(--ease-out); }
 .row .m { font-size: 0.85rem; color: var(--fg-3); white-space: nowrap; }
 .row:hover .t { color: var(--accent); }
 /* 列表卡在白底上，所以行内的字色/发丝线要翻回卡上那套（页面上的 .row 仍是黑底近白） */
@@ -1222,6 +1243,8 @@ footer.site {
   transition: none !important;
 }
 /* 到达文章页：内容从卡片方向升起（page-transition 在目标页打 html.pt-arrive）*/
+/* 这里的 0.72s 和 60ms 故意不进 --dur-in 那一套：它俩是跟 page-transition 那边
+   260ms 白幕、440ms 飞行咬着排的（白纸先退、内容再灌进来），动一个数就错位。 */
 html.pt-arrive .article {
   animation: pt-rise 0.72s 0.06s var(--ease-out) both; /* 延迟 60ms：白纸先退、内容跟随"灌"进来 */
 }

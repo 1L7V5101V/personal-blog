@@ -33,7 +33,9 @@ const EMAIL = 'hi@il7510n.dpdns.org';
     <div class="topveil" aria-hidden="true"></div>
 
     <nav class="topnav">
-      <a class="logo" href="/">il7510n</a>
+      {/* logo 也走 .u：顶栏所有链接的反馈都是同一套（变白 + 下划线展开），
+          它以前没带这个类，于是「回首页」这个链接什么都不响应 */}
+      <a class="logo u" href="/">il7510n</a>
       <div class="links">
         <a class="u" href="/blog/">文章</a>
         <a class="u" href="/columns/">栏目</a>
