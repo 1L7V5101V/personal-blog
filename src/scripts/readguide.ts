@@ -330,10 +330,11 @@ export function startReadguide(paper: HTMLElement, guide: HTMLElement) {
     vh = innerHeight;
     scan();
     layout();
-    lastBall = -1;
-    curY = NaN;
-    off = NaN;
-    offWritten = ballWritten = '';
+    lastBall = -1;          // 当前那一节的层级可能要变，球的大小和 left 要重新落一次
+    // 位移这里不重置。NaN 的含义是「下一帧直接吸附到目标」，那是给初次加载用的；
+    // 写作台每停手 350ms 就重新排一次，每次吸附就等于每敲一段、标尺和红球硬跳一下。
+    // 留着上一次的有限值，它就从自己当前所在的位置滑到新的目标位置 —— 内容变了，
+    // 但读者看到的是一根跟着阅读的尺，不是一张跟着排版抽动的尺。
   }
 
   rescan();

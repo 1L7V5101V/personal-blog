@@ -109,6 +109,8 @@ const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
   const msgEl = document.getElementById('msg')!;
   const mTitle = document.getElementById('m-title')!;
   const hintTpl = document.getElementById('hint') as HTMLTemplateElement;
+  // 减动效下不给纸面加淡入：内容该换还是换，只是不要那一下掩护
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const rg = startReadguide(paper, guide);
 
@@ -137,6 +139,15 @@ const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
     tmp.innerHTML = html;
     while (tmp.firstChild) paper.appendChild(tmp.firstChild);
     if (!html.trim()) paper.appendChild(hintTpl.content.cloneNode(true));
+    // 整段正文是在这一帧里被换掉的，而写作台每停手 350ms 就重新排一次 ——
+    // 这是全站唯一一处「内容凭空换掉、什么都没有交代」的地方：纸上跳一下，
+    // 左侧标尺和红球还硬切到新位置（那一条由 readguide 的 rescan 管）。
+    // 给纸面一次很浅的淡入就够：只动 opacity、只有一个元素、走合成层。
+    // 别改成「给每个新块各挂一条动画」—— 那份 12k px 的笔记有三百多个顶层块，
+    // 等于每次排版建三百条动画，代价全花在掩护一个 130ms 的落位上。
+    if (!reduced) {
+      paper.animate([{ opacity: 0.9 }, { opacity: 1 }], { duration: 130, easing: 'ease-out' });
+    }
   }
 
   // 排版引擎只在真要排版时才拉进来（shiki 的语法包和 KaTeX 加起来不小，
