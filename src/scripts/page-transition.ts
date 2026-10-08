@@ -144,11 +144,10 @@ function carryPan(anchor: Element, paper: HTMLDivElement) {
 /** 打开方向：纸片从卡片放大到满屏（iOS 式"点开"） */
 function openFrom(anchor: Element, rec: Rec) {
   const { cv, paper } = makeCurtain();
-  // 列表行（细条）用纯白纸片就够了——字放大成糊片不值得
-  if (!anchor.classList.contains('row')) {
-    paper.appendChild(flatClone(anchor));
-    carryPan(anchor, paper);
-  }
+  // 到这里的就只有卡片：列表行在 onClick 里已经走原生跳转了，
+  // 所以以前那个「行不克隆、只给空白纸片」的分支连同它的理由一起没必要留着。
+  paper.appendChild(flatClone(anchor));
+  carryPan(anchor, paper);
   paper.style.left = `${rec.x}px`;
   paper.style.top = `${rec.y}px`;
   paper.style.width = `${rec.w}px`;
@@ -213,7 +212,8 @@ function shrinkInto(rec: Rec, release: () => void) {
   }
 
   const { cv, paper } = makeCurtain();
-  if (anchor && !anchor.classList.contains('row')) {
+  // 同上：列表行不再走这条路，所以只要量得到那张卡就克隆。
+  if (anchor) {
     paper.appendChild(flatClone(anchor));
     carryPan(anchor, paper);
   }
@@ -261,6 +261,13 @@ function backTo(rec: Rec) {
     clearTimeout(bail);
     scrollLock(false);
   };
+  // 回到一个列表行：也不放纸片。理由和正向那条一样 —— 行的克隆本来就被跳过，
+  // 于是「缩回卡片」这一步只剩一个空白矩形往一行高里收。滚动位置上面已经恢复，
+  // 直接把控制权交还给读者。
+  if (document.querySelector<HTMLElement>(`[data-pt="${rec.pt}"]`)?.classList.contains('row')) {
+    release();
+    return;
+  }
   // 等滚动真正停住再量卡片实时版位（Lenis immediate 也要一两帧才落定；白纸全程盖着）
   let n = 0;
   const settle = (lastY = scrollY) => {
@@ -305,9 +312,6 @@ function onClick(e: MouseEvent) {
 
   if (a.hasAttribute('data-pt')) {
     const rect = a.getBoundingClientRect();
-    e.preventDefault();
-    transitioning = true;
-    scrollLock(true);
     const rec: Rec = {
       url: strip(href),
       src: cur,
@@ -319,6 +323,18 @@ function onClick(e: MouseEvent) {
       r: cardRadius(a),
       sy: scrollY,
     };
+    // 列表行不放纸片。openFrom 为了不把一行字放大成糊片，早就跳过了克隆（见那处 row 判断），
+    // 所以这里剩下的是一张空白矩形从一行高胀到满屏 —— 它已经不再把「你点的这一条」和
+    // 「你落到的那一页」连起来，只是把跳转推迟 455ms，还要顺手锁住滚动。
+    // 行是本站的主导航（首页列表卡、/blog/、每个 /columns/*），点穿 N 篇就是 N × 0.7~0.9 秒。
+    // 记录照写：后退时仍然要恢复点击时的滚动位置，那条是有用的、和动画无关。
+    if (a.classList.contains('row')) {
+      write(rec);
+      return;   // 不拦默认行为，让浏览器原生跳转
+    }
+    e.preventDefault();
+    transitioning = true;
+    scrollLock(true);
     write(rec);
     openFrom(a, rec);
     window.setTimeout(() => {
