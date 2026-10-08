@@ -180,6 +180,9 @@ export function startReadguide(paper: HTMLElement, guide: HTMLElement) {
   let off = NaN;          // 刻度条位移，NaN = 首帧直接吸附
   let curY = NaN;          // 光球纵向位置，同上
   let lastBall = -1;
+  // 逐帧写入的去重：这两个值都是指数逼近，永远到不了目标，不做判断就会一直写下去
+  let offWritten = '';
+  let ballWritten = '';
   let ballTextX = 0;     // 标题文字左缘的视口 x（layout 时量，见 BALL_GAP）
   let vh = innerHeight;
   let last = performance.now();
@@ -196,6 +199,7 @@ export function startReadguide(paper: HTMLElement, guide: HTMLElement) {
       lastBall = -1;
       curY = NaN;
       off = NaN;
+      offWritten = ballWritten = '';   // 重量过就必须真写一次，别让去重把这一笔省掉
       return;
     }
     const now = performance.now();
@@ -215,7 +219,14 @@ export function startReadguide(paper: HTMLElement, guide: HTMLElement) {
     const fpos = Math.min(1, Math.max(0, scrollY / maxScroll)) * (tickY.length - 1);
     const want = winH / 2 - fpos * RG_GAP;
     off = snap ? want : off + (want - off) * (1 - Math.pow(1 - 0.16, dt / 16.67));
-    track.style.setProperty('--rg-off', off.toFixed(2) + 'px');
+    // 直接写这层自己的 transform：以前是往它身上设 --rg-off 再由样式表读回去，
+    // 而自定义属性会继承，每写一次就要把整条刻度子树（正文条 + 标题刻度 + 生长池，
+    // 上百个节点）拉去做一遍继承检查。这里的消费者就是它自己，继承一点忙都没帮上。
+    const offStr = `translate3d(0, ${off.toFixed(2)}px, 0)`;
+    if (offStr !== offWritten) {
+      offWritten = offStr;
+      track.style.transform = offStr;
+    }
 
     // ---- 刻度生长：幅度跟滚动速度走 ----
     // 滑得越快鼓包越大，停下缩回基础长度；静止时标尺就是纯静态。
@@ -306,7 +317,12 @@ export function startReadguide(paper: HTMLElement, guide: HTMLElement) {
       ball.style.setProperty('--rg-ball', sz.toFixed(1) + 'px');
       ball.style.left = (ballTextX - sz * (0.5 + BALL_GAP)).toFixed(1) + 'px';
     }
-    ball.style.setProperty('--rg-y', curY.toFixed(2) + 'px');
+    // 光球同理：位移写在自己身上，居中的那半段 translate 跟着一起给（样式表里那份已经不再读变量）
+    const ballStr = `translate3d(0, ${curY.toFixed(2)}px, 0) translate(-50%, -50%)`;
+    if (ballStr !== ballWritten) {
+      ballWritten = ballStr;
+      ball.style.transform = ballStr;
+    }
   }
 
   // 内容变了（写作页每次重新排版）就要重量：行数、标题坐标、窗口高度全跟着动
@@ -317,6 +333,7 @@ export function startReadguide(paper: HTMLElement, guide: HTMLElement) {
     lastBall = -1;
     curY = NaN;
     off = NaN;
+    offWritten = ballWritten = '';
   }
 
   rescan();
