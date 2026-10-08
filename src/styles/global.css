@@ -198,6 +198,12 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
    这里只加东西、不摘默认描边。 */
 .u:focus-visible { color: var(--fg); }
 .u:focus-visible::after { transform: scaleX(1); transform-origin: left; }
+/* 当前那一段要有常驻标记。这个站的可交互信号只有「变亮 + 下划线」一件事，
+   而导航上从来不表示「你就在这一段」—— about 页和文章页一直在传 path，
+   但布局的 Props 里没有这个字段，值传进来就被丢掉了。现在接上：
+   下划线停在当前这一段那一格，键盘和读屏也拿得到 aria-current。 */
+.u.is-current { color: var(--fg); }
+.u.is-current::after { transform: scaleX(1); transform-origin: left; }
 
 /* ---------- 进场 stagger ---------- */
 /* 两套触发方式（loaded 一次性 / IntersectionObserver 逐批），但只有进场这一件事，
@@ -1138,7 +1144,14 @@ footer.site {
 .desk__src::placeholder { color: var(--fg-3); }
 
 .desk__bar { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; }
-.desk__msg { flex: 1; font-size: 0.82rem; color: var(--fg-3); }
+.desk__msg {
+  flex: 1;
+  font-size: 0.82rem;
+  color: var(--fg-3);
+  /* 状态文字从「保存中」翻成红字报错，以前是瞬间换色、凭空变红：
+     给颜色留一条过渡，「出事了」这一眼才跟得住。 */
+  transition: color 0.24s var(--ease-out);
+}
 .desk__msg.is-error { color: var(--accent); }
 .desk__save {
   display: flex;
@@ -1258,6 +1271,19 @@ html.pt-arrive .article {
     opacity: 1;
     transform: none;
   }
+}
+/* 导引层也要参与到达动画。以前 html.pt-arrive 只给纸面播 pt-rise，
+   标尺、横贯全宽那道红线和光球却在白幕淡出的那一刻就已经 100% 冻在那儿了 ——
+   它们标注的那张纸还在底下往上长，于是导引读起来像贴在页面上的界面，
+   而不是那张纸自己的一把尺。
+   ⚠ 用 backwards 而不是 both：延迟那 60ms 里要按 from 的状态藏着，
+   但动画一结束必须回到基础值 —— both/forwards 会把这一整层满屏固定元素
+   永久钉成合成层，正是文件里「别给 .readguide 整层 will-change」那条要避免的事。 */
+html.pt-arrive .readguide {
+  animation: rg-arrive 0.5s 0.06s var(--ease-out) backwards;
+}
+@keyframes rg-arrive {
+  from { opacity: 0; }
 }
 
 /* ---------- 移动端 ---------- */

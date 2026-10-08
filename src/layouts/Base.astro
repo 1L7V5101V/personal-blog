@@ -7,9 +7,17 @@ interface Props {
   description?: string;
   /** 顶部心电图模式：'fill' = 阅读进度条（默认）；'strip' = 走纸式，一拍画在一张卡正上方（首页） */
   ecgMode?: 'fill' | 'strip';
+  /** 当前页的路径。about.astro 和 blog/[slug].astro 早就在传这个属性了，
+      但 Props 里没声明、也没人读 —— 「你在哪一段」这个钩子等于设计了却没接线。 */
+  path?: string;
 }
-const { title = 'il7510n', description = 'il7510n 的个人博客', ecgMode } = Astro.props;
+const { title = 'il7510n', description = 'il7510n 的个人博客', ecgMode, path = Astro.url.pathname } = Astro.props;
 const EMAIL = 'hi@il7510n.dpdns.org';
+const NAV = [
+  { href: '/blog/', label: '文章' },
+  { href: '/columns/', label: '栏目' },
+  { href: '/about/', label: '关于' },
+];
 ---
 <!doctype html>
 <html lang="zh-CN">
@@ -37,9 +45,15 @@ const EMAIL = 'hi@il7510n.dpdns.org';
           它以前没带这个类，于是「回首页」这个链接什么都不响应 */}
       <a class="logo u" href="/">il7510n</a>
       <div class="links">
-        <a class="u" href="/blog/">文章</a>
-        <a class="u" href="/columns/">栏目</a>
-        <a class="u" href="/about/">关于</a>
+        {NAV.map((n) => (
+          <a
+            class:list={['u', { 'is-current': path.startsWith(n.href) }]}
+            href={n.href}
+            aria-current={path.startsWith(n.href) ? 'page' : undefined}
+          >
+            {n.label}
+          </a>
+        ))}
         <button class="u" data-copy={EMAIL} style="background:none;border:none;color:inherit;font:inherit;cursor:pointer">{EMAIL}</button>
       </div>
     </nav>
@@ -129,6 +143,11 @@ const EMAIL = 'hi@il7510n.dpdns.org';
       // click-to-copy（Rauno 式状态反馈）
       document.querySelectorAll<HTMLElement>('[data-copy]').forEach((btn) => {
         let timer: ReturnType<typeof setTimeout>;
+        // 顶栏是 space-between 的一条：按钮文字从邮箱（20 个字符）换成「已复制 ✓」（5 个），
+        // 会把它左边那三个链接一起横推一次、1.5 秒后再推回来，而且改的是宽度不是 transform ——
+        // 全站唯一一处「状态变化让邻居滑走」。这里先把量到的宽度钉住（只在建立监听时读一次），
+        // 之后两次换字都不挪动别人。
+        btn.style.minWidth = `${Math.ceil(btn.getBoundingClientRect().width)}px`;
         btn.addEventListener('click', async () => {
           const email = btn.getAttribute('data-copy') ?? '';
           try { await navigator.clipboard.writeText(email); } catch {}

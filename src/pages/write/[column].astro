@@ -215,7 +215,10 @@ const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
   });
   bodyEl.addEventListener('input', schedule);
 
+  let saving = false;
   async function saveArticle() {
+    if (saving) return;
+    saving = true;
     say('保存中');
     try {
       const render = await renderer();
@@ -238,9 +241,14 @@ const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
         localStorage.removeItem(DRAFT);
       } catch {}
       say('已存好');
-      // 库里现查，不用等任何东西重建：存完直接就能打开
-      location.assign(data.url);
+      // 这句话得真的被画出来。以前下一句就是 location.assign，同一个任务里就跳走了，
+      // 于是全站情绪最高的那一刻 —— 文章确实进库了 —— 渲染为零，作者什么也没看见。
+      // 留 400ms 让它落地再走：短到不打断手感，长到眼睛跟得上。
+      // 这 400ms 里 saving 不放手，顺手把「再按一次 Cmd+S 又往库里写一遍」堵住
+      //（以前没有这道闸，双击就能连发两次 POST）。
+      window.setTimeout(() => location.assign(data.url), 400);
     } catch (e) {
+      saving = false;   // 失败要能立刻再存一次，所以只在失败这条路上放行
       say((e as Error).message, true);
     }
   }
