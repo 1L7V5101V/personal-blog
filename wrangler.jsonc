@@ -8,13 +8,14 @@
   "compatibility_date": "2026-10-02",
   "compatibility_flags": ["nodejs_compat"],
   // 写作页与 /write/api/* 由 Cloudflare Access（Zero Trust 的 self_hosted 应用，
-  // 只盖 blog.il7510n.dpdns.org/write*）保护。这两个值给 src/lib/access.ts 验 CF-Access-JWT 用：
-  // TEAM_DOMAIN 是访问应用登录页那个域名，AUD 是应用详情页上的 App Auditory ID。
-  // 少了任何一个，线上就是「谁都不能写」（接口 403、写作页弹回首页），不会反向漏开。
-  "vars": {
-    "CF_ACCESS_TEAM_DOMAIN": "black-morning-adc0.cloudflareaccess.com",
-    "CF_ACCESS_AUD": "19282509c51f0f2d2c8ab5ba8cccee9fabd58e030b9587a915bc0a10fa93316c"
-  },
+  //   只盖 blog.il7510n.dpdns.org/write*）保护。src/lib/access.ts 要靠这两个值验 CF-Access-JWT：
+  //   TEAM_DOMAIN 是访问应用登录页那个域名，AUD 是应用详情页上的 App Auditory ID。
+  // ⚠ 这两个值不在本文件里，走 secret：
+  //   线上  npx wrangler secret put CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD
+  //   本地  .dev.vars（已被 .gitignore 排除）
+  //   理由不是它们是密钥（知道这两个值签不出任何 JWT，防线是验签 + iss/aud/exp），
+  //   而是这个仓库是公开的，没必要把 Access 应用的定位信息印在公开历史里。
+  //   少了任何一个，线上就是「谁都不能写」（接口 403、写作页弹回首页），不会反向漏开。
   "assets": {
     "directory": "./dist",
     // ⚠ 必须是 "none"，不能是 "404-page"：Cloudflare 的 asset worker 在请求带
