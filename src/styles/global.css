@@ -265,8 +265,9 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .slot .hero-card, .slot .hcard, .slot .poster, .slot .listpanel-card {
   /* 卡片也要成层：弯牌时本体就是切片里的「中条」，它和其余 10 条必须处在同一种渲染路径上，
      否则中条两边会跟克隆片看起来不一样（曾被读成“被切片”）。
-     卡上已经没有 box-shadow 了（挪到 .slot::before 去了），所以这层里只有内容 + 变换，很便宜。 */
-  transition: transform 0.45s var(--ease-out), box-shadow 0.45s var(--ease-out);
+     过渡列表里只有 transform：卡上不允许有 box-shadow（投影归 .slot::before），
+     再挂着一条 box-shadow 过渡就是个永远不会生效的信号。 */
+  transition: transform 0.45s var(--ease-out);
   will-change: transform;
 }
 .slot:hover .hero-card, .slot:hover .hcard, .slot:hover .poster, .slot:hover .listpanel-card {
@@ -577,7 +578,10 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .slot.is-hovering .hcard img,
   .slot.is-hovering .hcard .fdpt {
-    animation: hcard-focus 900ms var(--ease-out) forwards;
+    /* 曲线由两段关键帧各自给出（0% 和 13% 上的 animation-timing-function 已经覆盖了
+       整条时间线），所以这里不要再挂 var(--ease-out) —— 它永远不会生效，只会让人以为
+       这个动画跟着全站那个缓动 token 走。 */
+    animation: hcard-focus 900ms forwards;
   }
   /* 已经对完焦、或正在弯牌切片时，别让散焦动画跑起来：
      ① 切片是 cloneNode 快照，晚建的克隆动画相位和本体对不上 → 接缝一半糊一半清；
@@ -915,9 +919,9 @@ footer.site {
   inset: 0;
   z-index: 3;              /* 在纸面上、顶栏/dock/ECG 之下 */
   pointer-events: none;
-  --rg-min: 9px;           /* 最短边（正文行），固定 */
+  --rg-min: 22px;          /* 最短边（正文行），固定：和 readguide.ts 的 RG_MIN 同一个数 */
   --rg-x: clamp(1.1rem, 3.2vw, 3.4rem);
-  --rg-gap: 26px;          /* 刻度间距，由 JS 按实际行数覆写 */
+  --rg-gap: 8px;           /* 刻度间距，由 JS 按实际行数覆写：9px / 26px 是废弃值 */
 }
 
 /* 中间横线：贯穿全宽，两端各留一段实红（呼应参考图两端的色块）。
@@ -1192,7 +1196,11 @@ footer.site {
   border-radius: var(--card-r);
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
-  will-change: transform, opacity, border-radius;
+  /* will-change 里不要写 border-radius：Chromium 只能把 transform / opacity / filter / clip
+     放到合成线程，圆角动画一定回主线程。挂上它等于对外宣称这层有 GPU 加速，
+     实际只是让浏览器提前扣着一张满屏的层。圆角动画本身是承重的（纸片起始就是那张圆角卡），
+     所以留着，但提示语要说真话。 */
+  will-change: transform, opacity;
 }
 /* 纸片里的克隆：禁掉一切动的东西（hover/对焦/过渡在克隆里都不该出现）*/
 .pt-paper *,
@@ -1230,7 +1238,8 @@ html.pt-arrive .article {
 /* 首帧门控：等 fx 摆好扇位再显形（仅桌面，JS 失效时不遮蔽由媒体查询兜底） */
 @media (min-width: 769px) and (prefers-reduced-motion: no-preference) {
   .journey:not(.fx-ready) .track { opacity: 0; }
-  .journey .track { transition: opacity 0.3s ease; }
+  /* 首帧门控：fx 摆好扇位后淡入。曲线走全站那一个 token，不要留最后一处裸 ease */
+  .journey .track { transition: opacity 0.3s var(--ease-out); }
   /* 每帧都在改 transform 的元素各自成层：否则它们的重绘会打到父层（整条轨道 / 整个 stage）的瓦片上 */
   .slot { will-change: transform; }
   .hline { will-change: transform; }

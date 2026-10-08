@@ -27,7 +27,11 @@ type Rec = {
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const small = matchMedia('(max-width: 768px)').matches;
 // iOS 感：打开 = 快起、缓停（expo-out），冲过满屏 4% 再回落定住；关闭 = 加速撞进图标（ease-in）
-const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+// 缓动全站只有一个出处：global.css 的 --ease-out。这里读那个变量，别再抄一份字面量 ——
+// 抄的那份不会跟着 CSS 走，而这段过渡是每次点卡片、每次后退都要跑的。
+const EASE =
+  getComputedStyle(document.documentElement).getPropertyValue('--ease-out').trim() ||
+  'cubic-bezier(0.22, 1, 0.36, 1)';
 const EASE_IN = 'cubic-bezier(0.36, 0, 0.66, 0.42)';
 
 let transitioning = false; // 动画期间再点卡片不响应（防双击双跳）
@@ -181,7 +185,7 @@ function arrive() {
   paper.style.height = '100%';
   paper.style.borderRadius = '0';
   paper
-    .animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: 'ease-out', fill: 'forwards' })
+    .animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: EASE, fill: 'forwards' })
     .finished.then(() => cv.remove())
     .catch(() => {});
 }
@@ -235,7 +239,7 @@ function shrinkInto(rec: Rec, release: () => void) {
     { duration: 340, fill: 'forwards' }
   );
   anim.finished
-    .then(() => paper.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, easing: 'ease-out', fill: 'forwards' }).finished)
+    .then(() => paper.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 90, easing: EASE, fill: 'forwards' }).finished)
     .then(() => cv.remove())
     .catch(() => cv.remove())
     .finally(() => release());
