@@ -1244,7 +1244,9 @@ html.pt-arrive .article {
   .journey .track { transition: opacity 0.3s var(--ease-out); }
   /* 每帧都在改 transform 的元素各自成层：否则它们的重绘会打到父层（整条轨道 / 整个 stage）的瓦片上 */
   .slot { will-change: transform; }
-  .hline { will-change: transform; }
+  /* .hline 不在这一列里：它的 transform 从来没有人写过，每帧变的是它三条子路径的
+     strokeDashoffset（内容在变、位移不变）。给这种元素成层只会把整屏大的 SVG 扣成
+     一张瓦片，每次描线都要重画整张 —— 合成层省的是「内容不动只挪位置」的那类重绘。 */
 }
 
 @media (max-width: 768px) {
