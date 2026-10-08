@@ -1,9 +1,13 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
 import { allPosts, columnName, fmtDate, updatedAt } from '../../lib/posts';
 
+// 文章在 D1 里，构建期没有库可读，所以这一页每次请求现查
+export const prerender = false;
+
 // 全部文章，按各篇的最后更新时间倒序（栏目名只是标一下它属于哪一栏）
-const posts = await allPosts();
+const posts = await allPosts(env.DB);
 ---
 <Base title="文章 · il7510n">
   <section class="wrap pagehead">
@@ -13,9 +17,9 @@ const posts = await allPosts();
   <section class="wrap">
     <div class="list">
       {posts.map((p, i) => (
-        <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>
-          <span class="t">{p.data.title}</span>
-          <span class="m">{columnName(p.data.column)} · {fmtDate(updatedAt(p))}</span>
+        <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.slug}/`} data-pt={`row:${p.slug}`}>
+          <span class="t">{p.title}</span>
+          <span class="m">{columnName(p.column)} · {fmtDate(updatedAt(p))}</span>
         </a>
       ))}
     </div>

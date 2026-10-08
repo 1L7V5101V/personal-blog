@@ -1,38 +1,49 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
-import { getCollection, render } from 'astro:content';
-import { columnName, fmtDate, updatedAt } from '../../lib/posts';
+import { columnName, fmtDate, postBySlug, updatedAt } from '../../lib/posts';
+import { canWrite } from '../../lib/access';
 // KaTeX 按页引入：只有文章页需要公式，不往首页/列表页发
 import 'katex/dist/katex.min.css';
 
-export async function getStaticPaths() {
-  const posts = await getCollection('blog');
-  return posts.map((p) => ({ params: { slug: p.id }, props: { post: p } }));
-}
+// 正文在 D1 的 body_html 列里（保存那一刻排好的），所以这一页每次请求现查。
+// 不在请求里跑 Markdown/KaTeX：那篇最长的笔记排一次要 675ms CPU。
+export const prerender = false;
 
-const { post } = Astro.props;
-const { Content } = await render(post);
+const post = await postBySlug(env.DB, Astro.params.slug!);
+if (!post) return Astro.redirect('/blog/');
+
+// 「编辑这篇」只给自己看：进过写作页的人有那个记号（见 agents.md 坑 16）。
+// 这一页因此随登录状态变，不能被边缘按 URL 共享缓存。
+const showWrite = await canWrite(Astro.request, env) || Astro.cookies.get('canwrite')?.value === '1';
+if (showWrite) Astro.response.headers.set('Cache-Control', 'private, max-age=0, must-revalidate');
+
+// 正文 HTML 是站上写作时由浏览器排好交上来的，不是服务端产的 —— 所以这一页要假定
+// body_html 里可能混进能执行的东西。script-src 不给 unsafe-inline 也不给 unsafe-hashes：
+// 写在内联标签里的脚本、以及 on 开头的内联事件属性都不执行，脚本只能从本站同源取。
+Astro.response.headers.set('Content-Security-Policy', "script-src 'self'; object-src 'none'; base-uri 'self'");
 
 // 手写标题组件会把字体 bundle（十几 KB）拉进来。**必须条件加载** ——
 // 无条件 import 等于每篇文章都背这份体积，而全站只有一两篇用它。
 // vite 会把它切成独立 chunk，没用到的文章页不会带上。
-const Handwritten = post.data.handwritten
+const Handwritten = post.handwritten
   ? (await import('../../components/Handwritten.astro')).default
   : null;
 // 这篇属于哪个栏目（栏目名查 src/data/columns.ts），以及它的最后更新时间
-const colName = columnName(post.data.column);
+const colName = columnName(post.column);
 const fmt = fmtDate(updatedAt(post));
 ---
-<Base title={`${post.data.title} · il7510n`} description={post.data.title} path={`/blog/${post.id}/`}>
+<Base title={`${post.title} · il7510n`} description={post.title} path={`/blog/${post.slug}/`}>
   <div class="wrap article">
     <article class="prose paper">
-      <a class="backlink u" href={`/columns/${post.data.column}/`} data-backlink>← {colName}</a>
-      {Handwritten && post.data.handwritten && <Handwritten text={post.data.handwritten} />}
+      <a class="backlink u" href={`/columns/${post.column}/`} data-backlink>← {colName}</a>
+      {Handwritten && post.handwritten && <Handwritten text={post.handwritten} />}
       <div class="meta">
         <span>{fmt}</span>
+        {showWrite && <a class="u editbtn" href={`/write/${post.column}/?slug=${post.slug}`}>编辑这篇</a>}
       </div>
-      <h1>{post.data.title}</h1>
-      <Content />
+      <h1>{post.title}</h1>
+      <Fragment set:html={post.bodyHtml} />
     </article>
   </div>
 <!-- 阅读导引：左侧标尺（一行一条刻度）+ 视口正中的阅读横线 + 光球。
@@ -49,342 +60,11 @@ const fmt = fmtDate(updatedAt(post));
   </div>
 </Base>
 <script>
-  // ---- 阅读导引 ----
-  // 左侧标尺 = 文章的一张缩略地图，跟随阅读位置在窗口里上下滚：
-  // 中心横线当前指着正文的那一行，永远对应刻度条上落在横线高度的那条刻度。
-  //
-  // 刻度：一条 = 正文一行；标题按层级给更长的刻度。**最长边 / 最短边固定**，
-  // 中间档在两者之间按「本页实际存在的层级总数」线性插值。
-  // 间距也固定（RG_GAP），所以长文章的刻度条会远长于窗口 → 两端渐隐 + 滚动。
-  //
-  // 光球在**正文里**，落在当前标题的左侧边距，正圆，随层级递减。
+  // 阅读导引抽成共用模块（src/scripts/readguide.ts）：写作页 /write/栏目/ 用的是
+  // 同一份，所以两处的标尺、红线、红球行为不会各走各的。
+  import { startReadguide } from '../../scripts/readguide';
+
   const prose = document.querySelector<HTMLElement>('.prose');
   const guide = document.querySelector<HTMLElement>('.readguide');
-
-  if (prose && guide) {
-    const paper = prose;
-    const ruler = guide.querySelector<HTMLElement>('.readguide__ruler')!;
-    const track = guide.querySelector<HTMLElement>('.readguide__track')!;
-    const bodyStrip = guide.querySelector<HTMLElement>('.readguide__body')!;
-    const ball = guide.querySelector<HTMLElement>('.readguide__ball')!;
-
-    const RG_MAX = 64;          // 刻度最长边（最大的标题），固定
-    const RG_MIN = 22;          // 刻度最短边（正文行），固定。之前定 9 太短了：
-                                // 64 vs 9 的落差让正文那一档细到看不见，
-                                // 22 让「正文 / h3 / h2 / h1」四档一眼分得开
-    const RG_GAP = 8;           // 刻度间距：固定小值，不随文章长度变
-    const AVAIL = 0.62;         // 窗口最多占视口高度的百分比
-    const BALL_EASE = 0.06;   // 光球补间速率：越小越慢（时间常数 ≈ -16.7/ln(1-rate)）
-                           // 0.12 → 约 160ms，0.06 → 约 325ms
-    const BALL_MAX = 22.4, BALL_MIN = 9.8;   // 光球直径：最大层级 / 最小层级（2026-10 ×1.4，原 16 / 7）
-    const BALL_GAP = 0.75;   // 光球右缘到标题文字的空隙 = 球径 × 这个比例（球大空隙跟着大）
-    const PREFER = 28;        // 「更大层级优先」的判定距离
-
-    // ---- 刻度生长（横线经过 / 鼠标悬停）----
-    // 焦点附近的刻度按高斯衰减往最长边长：L = base + (maxLen - base) * w。
-    // 生长用 transform: scaleX（origin 左端），不写 width —— 改 width 是
-    // 每帧重排，scaleX 只重绘一小块。池子必须罩住整个标尺窗口：
-    // 红线永远在窗口中心（进度映射），但鼠标悬停的焦点可以落在窗口里
-    // 离红线任意远的位置 —— 池子只盖红线附近的话，悬停就只对红线附近
-    // 的刻度起作用（踩过）。池子外还是 gradient 条 + 标题 <i>，池子刻度
-    // 在 w=1 时与底下静态刻度像素完全重合，不用显隐切换。
-    const GROW_SIGMA = 5;     // 衰减步长（条数），峰值在焦点、±5 条处剩 37%
-    const HOVER_REACH = 48;   // 标尺右缘再往右这么多 px 以内都算悬停区
-    const VEL_REF = 55;       // 滚动速度 → 生长幅度的满格点（px / 16.7ms）
-    const pool: HTMLElement[] = [];
-    const poolIdx: number[] = [];    // 池子元素当前对应的刻度下标，-1 = 未设
-    const poolBase: number[] = [];   // 同上，对应刻度的基础长度（scaleX 的分母）
-    let poolHalf = 0;                // 池子半径（条数），layout 里按窗口高算
-    let mx = -1, my = -1;            // 鼠标位置（pointermove 写，rAF 读）
-    let hoverAmt = 0;                // 悬停强度，往 0/1 缓动，进出不突跳
-    let rulerLeft = 0;               // 标尺左缘（--rg-x 的实际落点），layout 时量一次
-    let lastY = -1;                  // 上一帧 scrollY，算瞬时速度
-    let vSmooth = 0;                 // 平滑后的滚动速度（px/16.7ms），快攻慢放
-    let poolIdle = false;            // 全部缩回基础长度时置位，省掉逐帧 transform 写入
-    let maxScroll = 1;               // 文档可滚动量，scan 时量一次（进度映射的分母）
-
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    type Head = { level: number; el: HTMLElement; top: number; h: number };
-    const ticks: (number | null)[] = [];   // null = 正文行
-    const tickY: number[] = [];            // 每条刻度对应的文档 Y（单调递增）
-    const heads: Head[] = [];
-    let levels: number[] = [];             // 本页实际存在的层级，升序
-    let lineH = 27;
-    let maxLen = RG_MAX;
-    let winH = 0;
-
-    // ---- 建刻度表 + 每条刻度的文档坐标 ----
-    function scan() {
-      ticks.length = 0;
-      tickY.length = 0;
-      heads.length = 0;
-      lineH = parseFloat(getComputedStyle(paper).lineHeight) || 27;
-
-      for (const el of Array.from(paper.children) as HTMLElement[]) {
-        const r = el.getBoundingClientRect();
-        // 不产生盒子的节点（SCRIPT / STYLE / LINK 等）直接跳过。
-        // 不跳过的话每个都算出 Math.max(1, round(0 / lineH)) = 1 条刻度，
-        // 在缩略地图顶部凭空多出几个空行 —— 比如组件里的 <style> 和
-        // 序列化 bundle 的 <script type="application/json"> 都会中招。
-        if (r.height === 0 && r.width === 0) continue;
-        const top = r.top + scrollY;
-        if (/^H[1-6]$/.test(el.tagName)) {
-          const level = Number(el.tagName[1]);
-          heads.push({ level, el, top, h: r.height });
-          ticks.push(level);
-          tickY.push(top);
-        } else {
-          const n = el.tagName === 'PRE'
-            ? Math.max(1, (el.textContent ?? '').split('\n').length)
-            : Math.max(1, Math.round(r.height / lineH));
-          for (let i = 0; i < n; i++) {
-            ticks.push(null);
-            tickY.push(top + (i + 0.5) * lineH);
-          }
-        }
-      }
-      levels = [...new Set(heads.map((h) => h.level))].sort((a, b) => a - b);
-      maxScroll = Math.max(1, document.documentElement.scrollHeight - innerHeight);
-    }
-
-    // ---- 边长：固定两端 + 按层级数线性插值中间档 ----
-    function tickLen(level: number | null) {
-      if (level === null) return RG_MIN;
-      const rank = levels.indexOf(level);              // 0 = 最大的层级
-      return RG_MIN + (maxLen - RG_MIN) * ((levels.length - rank) / levels.length);
-    }
-    // ---- 光球直径：跟着刻度长度走，开方让层级差拉得开 ----
-    function ballSize(level: number) {
-      const ratio = (tickLen(level) - RG_MIN) / (maxLen - RG_MIN);
-      const fr = ratio * ratio;
-      return BALL_MIN + (BALL_MAX - BALL_MIN) * fr;
-    }
-
-    // ---- 当前该落在哪个标题上 ----
-    function active(): Head {
-      const ry = scrollY + vh / 2;   // 阅读横线的文档坐标
-      let a = heads[0];
-      for (const h of heads) {
-        if (h.top <= ry + 1) a = h;
-        else break;
-      }
-      // 「如果有更大层级优先落在更大层级」：更大的层级（level 更小）刚好压在
-      // 横线上时，哪怕它比当前候选低，也改落它。
-      for (const h of heads) {
-        if (h.level < a.level && Math.abs(h.top - ry) < PREFER) return h;
-      }
-      return a;
-    }
-
-    function layout() {
-      if (!ticks.length) return;
-      // 最长边随视口收一收，窄屏上别撞到纸面
-      maxLen = Math.round(Math.min(RG_MAX, Math.max(34, innerWidth * 0.046)));
-      ruler.style.width = maxLen + 'px';
-
-      const contentH = ticks.length * RG_GAP;
-      // 窗口：短文就用内容高度（外留 32px 让渐隐有地方化），
-      // 长文封顶在视口的 AVAIL —— 刻度条超出窗口的部分靠滚动看。
-      winH = Math.round(Math.min(innerHeight * AVAIL, contentH + 32));
-      ruler.style.height = winH + 'px';
-      track.style.height = contentH + 'px';
-      track.style.setProperty('--rg-gap', RG_GAP + 'px');
-      bodyStrip.style.width = RG_MIN + 'px';
-
-      // 只给**标题**刻度建 DOM：正文刻度是一条 repeating-linear-gradient（见 CSS）。
-      // 369 条刻度里 350 条是正文，用 DOM 画就是白挂 350 个绝对定位元素。
-      const frag = document.createDocumentFragment();
-      ticks.forEach(function (lv, i) {
-        if (lv === null) return;
-        const el = document.createElement('i');
-        el.className = 'readguide__tick';
-        el.style.top = i * RG_GAP + 'px';
-        el.style.width = tickLen(lv).toFixed(2) + 'px';
-        frag.appendChild(el);
-      });
-      // 生长刻度池垫在最上面（w=1 时和静态刻度重合）。reduced-motion 下
-      // 不做生长，整池不建，update 里那段也整体跳过。
-      pool.length = 0; poolIdx.length = 0; poolBase.length = 0;
-      if (!reduced) {
-        // 池子半径盖住窗口半高再多 2 条：红线在窗口中心，悬停焦点
-        // 最远到窗口边缘，±2 条余量把高斯的尾巴也包进来
-        poolHalf = Math.ceil(winH / 2 / RG_GAP) + 2;
-        for (let k = 0; k < poolHalf * 2 + 1; k++) {
-          const el = document.createElement('i');
-          el.className = 'readguide__grow';
-          frag.appendChild(el);
-          pool.push(el);
-          poolIdx.push(-1);
-          poolBase.push(1);
-        }
-      }
-      track.replaceChildren(bodyStrip, frag);
-
-      // 光球紧贴正文：右缘停在标题文字左边「球径 × BALL_GAP」处。left 是圆心（CSS 里
-      // translate(-50%) 居中），而球径随层级变，所以 left 跟着尺寸一起写在 update 里，
-      // 这里只存住标题文字左缘这条基准线。
-      const padX = parseFloat(getComputedStyle(paper).paddingLeft) || 32;
-      ballTextX = paper.getBoundingClientRect().left + padX;
-      lastBall = -1;                       // 逼下一帧把尺寸和 left 一起重写
-      rulerLeft = ruler.getBoundingClientRect().left;
-    }
-
-    let off = NaN;          // 刻度条位移，NaN = 首帧直接吸附
-    let curY = NaN;          // 光球纵向位置，同上
-    let lastBall = -1;
-    let ballTextX = 0;     // 标题文字左缘的视口 x（layout 时量，见 BALL_GAP）
-    let vh = innerHeight;
-    let last = performance.now();
-
-    function update() {
-      if (!heads.length) return;
-      // 视口高度变了但没收到 resize 事件（嵌入窗格里见过：窗格定尺寸不发
-      // resize，layout 在 0 高视口跑完就永远卡在 winH=0）—— 每帧比对一次，
-      // 整数比较不触发布局，变了就重量。
-      if (innerHeight !== vh) {
-        vh = innerHeight;
-        scan();
-        layout();
-        lastBall = -1;
-        curY = NaN;
-        off = NaN;
-        return;
-      }
-      const now = performance.now();
-      const dt = Math.min(64, now - last);
-      last = now;
-      const snap = reduced || !Number.isFinite(off);
-
-      // ---- 标尺：红线在刻度条上的位置 = 滚动进度，两端钉死 ----
-      // 顶（scrollY=0）↔ tick 0、底（scrollY=maxScroll）↔ 最后一条刻度，
-      // 中间按滚动进度线性对应。用户的两个要求只能这样同时满足：
-      // 「最高点在红线上」+「红线指的刻度对应红线在正文的位置」——
-      // 刻度一比一对应正文行，文档纵向上刻度分布本来就近似均匀，
-      // 中段的行对应是精确的；若用「视口中线所在行」做映射，页面顶部
-      // 时红线指着首屏中间的行，第一条刻度永远到不了红线上（踩过）。
-      // ⚠ 符号：offset > 0 是把刻度条往下推。要让第 i 条落到中线
-      // （距顶 winH/2），得往上推 i*GAP - winH/2。写反了球会往屏幕外跑。
-      const fpos = Math.min(1, Math.max(0, scrollY / maxScroll)) * (tickY.length - 1);
-      const want = winH / 2 - fpos * RG_GAP;
-      off = snap ? want : off + (want - off) * (1 - Math.pow(1 - 0.16, dt / 16.67));
-      track.style.setProperty('--rg-off', off.toFixed(2) + 'px');
-
-      // ---- 刻度生长：幅度跟滚动速度走 ----
-      // 滑得越快鼓包越大，停下缩回基础长度；静止时标尺就是纯静态。
-      // 幅度 = 平滑速度归一，快攻慢放（起量跟手，拖尾 ~300ms）。
-      // 鼓包拖在横线后面那条尾巴不用额外做：轨道位移 off 本来就是
-      // lerp 平滑的，快速滑动时轨道落后于阅读位置，鼓包自然偏在后方。
-      // 鼠标悬停的幅度恒为满格，不需要速度。
-      if (pool.length) {
-        const vel = lastY < 0 ? 0 : (scrollY - lastY) / dt * 16.67;
-        lastY = scrollY;
-        vSmooth += (vel - vSmooth)
-          * (Math.abs(vel) > Math.abs(vSmooth) ? 0.5 : 1 - Math.pow(1 - 0.055, dt / 16.67));
-        const amp = Math.min(1, Math.abs(vSmooth) / VEL_REF);
-
-        // 悬停只在指针进到标尺横带（刻度条上任意高度）里生效，幅度恒为满格
-        const inZone = my >= 0 && mx >= rulerLeft - 12 && mx <= rulerLeft + maxLen + HOVER_REACH;
-        hoverAmt += ((inZone ? 1 : 0) - hoverAmt) * (1 - Math.pow(1 - 0.18, dt / 16.67));
-
-        if (amp < 0.01 && hoverAmt < 0.01) {
-          // 静止且无悬停：全部藏掉让静态刻度顶班，只写一次
-          if (!poolIdle) {
-            poolIdle = true;
-            for (const el of pool) el.style.transform = 'scaleX(0.0001)';
-          }
-        } else {
-          poolIdle = false;
-          // 鼠标的刻度坐标：视口 y 反推回刻度条坐标（标尺窗口顶 = vh/2 - winH/2）
-          const mpos = (my - (vh / 2 - winH / 2) - off) / RG_GAP;
-          // 滑得越快包络也越宽（0.75σ ~ 1.2σ）
-          const sig = GROW_SIGMA * (0.75 + 0.45 * amp);
-
-          const center = Math.round(fpos);
-          for (let k = 0; k < pool.length; k++) {
-            const i = center + k - poolHalf;
-            const el = pool[k];
-            if (i < 0 || i >= ticks.length) {
-              el.style.transform = 'scaleX(0.0001)';
-              continue;
-            }
-            if (poolIdx[k] !== i) {
-              poolIdx[k] = i;
-              const lv = ticks[i];
-              let base: number;
-              el.style.top = i * RG_GAP + 'px';
-              // 池子刻度全程不透明、颜色恒定：基部要整个盖住底下的静态刻度、
-              // 伸出去的部分要和基部同色，透明度一动就是一条刻度两截颜色
-              // （踩过一次）。所有刻度已统一为实色，生长只变长度。
-              if (lv === null) {
-                base = RG_MIN;
-                el.style.width = RG_MIN + 'px';
-                el.style.background = 'var(--fg-3)';
-              } else {
-                base = tickLen(lv);
-                el.style.width = base.toFixed(2) + 'px';
-                el.style.background = 'var(--fg-2)';
-              }
-              poolBase[k] = base;
-            }
-            const b = poolBase[k];
-            const w = Math.max(
-              amp * Math.exp(-(((i - fpos) / sig) ** 2)),
-              hoverAmt * Math.exp(-(((i - mpos) / GROW_SIGMA) ** 2)),
-            );
-            // 长度往最长边收：L = base + (maxLen - base) * w，换算成 scaleX 倍数。
-            // w≈0 时直接藏掉池子刻度，让底下静态刻度顶班 —— 省一笔重绘。
-            el.style.transform = w < 0.004
-              ? 'scaleX(0.0001)'
-              : 'scaleX(' + ((b + (maxLen - b) * w) / b).toFixed(4) + ')';
-          }
-        }
-      }
-
-      // ---- 光球：严格跟随当前标题，不夹取 ----
-      // 目标是该标题在视口里的垂直中心。标题一旦滚出屏幕顶端，球也跟着出去 ——
-      // 这是故意的：球表示「当前在哪一节」，而不是「你在视口的哪个高度」。
-      // 标题还在屏内时球就精确贴在它身上；标题出了屏，球也出屏；
-      // 等下一节到来，球再滑过去。中间那段正文里，球就停在（屏外的）上一节上。
-      const a = active();
-      const target = a.top - scrollY + a.h / 2;
-      const k = snap || !Number.isFinite(curY) ? 1 : 1 - Math.pow(1 - BALL_EASE, dt / 16.67);
-      curY = snap || !Number.isFinite(curY) ? target : curY + (target - curY) * k;
-
-      // 尺寸只在这一刻的层级真的变了时才写：改 width 是重排，每帧写就是每帧重排
-      // （left 也在这里跟着重写：球径变了，要贴着正文就得换圆心）
-      if (a.level !== lastBall) {
-        lastBall = a.level;
-        const sz = ballSize(a.level);
-        ball.style.setProperty('--rg-ball', sz.toFixed(1) + 'px');
-        ball.style.left = (ballTextX - sz * (0.5 + BALL_GAP)).toFixed(1) + 'px';
-      }
-      ball.style.setProperty('--rg-y', curY.toFixed(2) + 'px');
-    }
-
-    scan();
-    layout();
-    (window as any).__fx = (window as any).__fx || [];
-    (window as any).__fx.push(update);
-
-    // resize 会重排 → 行数、窗口高度、标题坐标、光球横向位置全部要重量
-    let rt = 0;
-    addEventListener('resize', () => {
-      clearTimeout(rt);
-      rt = window.setTimeout(() => {
-        vh = innerHeight;
-        scan();
-        layout();
-        lastBall = -1;
-        curY = NaN;
-        off = NaN;
-      }, 140);
-    });
-    // 字体落地后行高会变，行数跟着变
-    document.fonts?.ready.then(() => { (window as any).__rgDbg.fontN++; scan(); layout(); lastBall = -1; off = NaN; });
-
-    // 悬停生长：pointermove 只写两个数，读取都在 rAF 里（不碰布局）
-    addEventListener('pointermove', (e) => { mx = e.clientX; my = e.clientY; }, { passive: true });
-    document.documentElement.addEventListener('mouseleave', () => { mx = -1; my = -1; });
-  }
+  if (prose && guide) startReadguide(prose, guide);
 </script>

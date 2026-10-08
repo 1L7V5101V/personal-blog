@@ -1,9 +1,35 @@
 {
-  // Cloudflare Workers（静态资产模式）——部署命令 npx wrangler deploy 依赖此文件
+  // Cloudflare Workers（静态资产 + Astro 按需渲染的入口）
+  //   本地：npm run dev（适配器在 workerd 里跑，D1 用 .wrangler/state 下的本地库）
+  //   上线：npm run build && npx wrangler deploy
+  // main / assets 的实际解析由 @astrojs/cloudflare 写进 dist/server/wrangler.json，
+  // 所以这里不要自己写 main。
   "name": "personal-blog",
   "compatibility_date": "2026-10-02",
+  "compatibility_flags": ["nodejs_compat"],
+  // 写作页与 /write/api/* 由 Cloudflare Access（Zero Trust 的 self_hosted 应用，
+  // 只盖 blog.il7510n.dpdns.org/write*）保护。这两个值给 src/lib/access.ts 验 CF-Access-JWT 用：
+  // TEAM_DOMAIN 是访问应用登录页那个域名，AUD 是应用详情页上的 App Auditory ID。
+  // 少了任何一个，线上就是「谁都不能写」（接口 403、写作页弹回首页），不会反向漏开。
+  "vars": {
+    "CF_ACCESS_TEAM_DOMAIN": "black-morning-adc0.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "19282509c51f0f2d2c8ab5ba8cccee9fabd58e030b9587a915bc0a10fa93316c"
+  },
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "404-page"
-  }
+    // ⚠ 必须是 "none"，不能是 "404-page"：Cloudflare 的 asset worker 在请求带
+    //   Sec-Fetch-Mode: navigate（也就是浏览器地址栏导航）时会自己按 not_found_handling
+    //   处理，不去问 Astro 的 Worker。文章页都是运行时渲染的、磁盘上没有同名文件，
+    //   写成 "404-page" 的结果就是：浏览器进来一律看到 404 页，curl 测却是 200。
+    //   "none" = 没命中静态文件就把请求交给 Worker，404 由 Astro 自己的 404 页出。
+    "not_found_handling": "none"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "blog",
+      "database_id": "47c6a443-7a03-4948-841a-70b7d385d55a",
+      "migrations_dir": "migrations"
+    }
+  ]
 }

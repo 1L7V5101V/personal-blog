@@ -1,5 +1,5 @@
 ---
-title: Ubiquitous Language —— 硅光挠曲电统一记号表
+title: "Ubiquitous Language —— 硅光挠曲电统一记号表"
 date: 2026-08-20
 column: test
 ---

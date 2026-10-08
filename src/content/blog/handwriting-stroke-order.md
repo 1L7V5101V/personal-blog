@@ -1,8 +1,8 @@
 ---
-title: 让字体自己写出笔顺
+title: "让字体自己写出笔顺"
 date: 2026-10-03
 column: test
-handwritten: Handwriting, not typing.
+handwritten: "Handwriting, not typing."
 ---
 
 这篇文章顶上那行红字不是打字机打出来的，是一个字一个字**按笔顺写**出来的：

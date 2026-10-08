@@ -1,0 +1,261 @@
+---
+import { env } from 'cloudflare:workers';
+import Base from '../../layouts/Base.astro';
+import { columnOf } from '../../data/columns';
+import { fmtDate } from '../../lib/posts';
+import { canWrite } from '../../lib/access';
+import { loadPost } from '../../lib/writer';
+// 预览里有公式就要 KaTeX 的 CSS，和文章页同一份
+import 'katex/dist/katex.min.css';
+
+// 站上写作现在是真的线上功能：文章在 D1 里，这一页按需渲染。
+// ⚠ 排版在浏览器里跑 src/lib/render.ts —— Workers Free 每个请求只有 10ms CPU，
+//   服务端排不动（实测一篇长文要 675ms）。存的时候把 Markdown 和排好的 HTML 一起交。
+export const prerender = false;
+
+const col = columnOf(Astro.params.column!);
+if (!col) return Astro.redirect('/columns/');
+
+// 读者就算猜中地址也进不来：没配 Access 变量时 canWrite 恒为 false
+const authorized = await canWrite(Astro.request, env);
+// 这一页的内容随登录状态变（那颗按钮），不能让边缘按 URL 共享缓存
+Astro.response.headers.set('Cache-Control', 'private, max-age=0, must-revalidate');
+if (!authorized) {
+  return Astro.redirect('/');
+}
+// 留个记号给栏目页看：Access 只覆盖 /write*，栏目页那种公开路径拿不到
+// CF-Access-JWT，只能靠这个记号决定露不露「＋ 撰写文章」。它不是凭证 ——
+// 自己手动塞一个也只能多看见一个按钮，真要写还是得过 Access 与接口验签。
+Astro.cookies.set('canwrite', '1', {
+  path: '/',
+  maxAge: 60 * 60 * 24 * 30,
+  sameSite: 'lax',
+  httpOnly: false,
+});
+
+// 带着 ?slug= 来就是要改已有那篇，先把库里的 Markdown 取回来填进写作台
+const editing = Astro.url.searchParams.get('slug');
+const found = editing ? await loadPost(env.DB, editing) : null;
+if (editing && found!.status !== 200) return Astro.redirect(`/columns/${col.slug}/`);
+const post = found?.data as Record<string, string | null> | undefined;
+if (post && post.column_slug !== col.slug) {
+  return Astro.redirect(`/write/${post.column_slug}/?slug=${encodeURIComponent(editing!)}`);
+}
+
+const today = fmtDate(new Date());
+const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
+---
+<Base title={`${post ? '修改文章' : '撰写文章'} · ${col.name} · il7510n`}>
+  <div class="wrap article writing">
+    <!-- 纸面就是文章页那一张：黑场里的白纸 + 暖棕墨水 + 阅读导引（标尺 / 贯穿红线 / 红球）。
+         写作台里每改一行，这里就重新排一次 —— 看到的就是发布后的样子。
+         大标题（h1）由标题框实时喂进来，正文的块从它后面往下插。 -->
+    <article class="prose paper" id="page">
+      <a class="backlink u" href={`/columns/${col.slug}/`} data-backlink>← {col.name}</a>
+      <div class="meta">
+        <span>{shown}</span>
+        <span class="hint">{post ? '编辑中' : '草稿'}</span>
+      </div>
+      <h1 id="m-title">{post?.title || '未命名'}</h1>
+    </article>
+    <!-- 正文还没写时纸面上那句话。template 不产生盒子，阅读导引扫不到它，
+         等真有了正文就整个不被引用 -->
+    <template id="hint"><p class="hint">正文还是空的。下面那块写作台里写 Markdown，这张纸上就实时排出来。</p></template>
+  </div>
+
+  <form class="desk" id="desk" autocomplete="off"
+    data-column={col.slug}
+    data-mode={post ? 'edit' : 'new'}
+    data-slug={post?.slug ?? ''}>
+    <div class="desk__fields">
+      <label class="fld fld--title">
+        <span>标题</span>
+        <input id="f-title" type="text" placeholder="这篇文章叫什么" value={post?.title ?? ''}>
+      </label>
+      <label class="fld fld--slug">
+        <span>地址</span>
+        <span class="path">/blog/<input id="f-slug" type="text" spellcheck="false" placeholder="slug" value={post?.slug ?? ''} readonly={!!post}>/</span>
+      </label>
+    </div>
+    <textarea class="desk__src" id="f-body" spellcheck="false" data-lenis-prevent
+      placeholder="## 小节标题&#10;&#10;正文直接写。表格、代码块、$E=mc^2$ 这类公式都按文章页那套排版。&#10;页面顶上的大标题用左边那个「标题」框，正文里就不必再来一个 # 。">{post?.body_md ?? ''}</textarea>
+    <div class="desk__bar">
+      <span class="desk__msg" id="msg"></span>
+      <button class="desk__save" id="save" type="submit">{post ? '存回这篇' : '存成文章'}<em>Ctrl S</em></button>
+    </div>
+  </form>
+
+  <!-- 阅读导引：和文章详情页同一份标记、同一份脚本（src/scripts/readguide.ts） -->
+  <div class="readguide" aria-hidden="true">
+    <div class="readguide__ruler">
+      <div class="readguide__track"><div class="readguide__body"></div></div>
+    </div>
+    <div class="readguide__line"></div>
+    <span class="readguide__ball"></span>
+  </div>
+</Base>
+<script>
+  import { startReadguide } from '../../scripts/readguide';
+
+  const paper = document.getElementById('page') as HTMLElement;
+  const guide = document.querySelector<HTMLElement>('.readguide')!;
+  const desk = document.getElementById('desk') as HTMLElement;
+  const col = desk.dataset.column ?? '';
+  const mode = desk.dataset.mode === 'edit' ? 'edit' : 'new';
+  const fixedSlug = desk.dataset.slug ?? '';
+  const titleEl = document.getElementById('f-title') as HTMLInputElement;
+  const slugEl = document.getElementById('f-slug') as HTMLInputElement;
+  const bodyEl = document.getElementById('f-body') as HTMLTextAreaElement;
+  const msgEl = document.getElementById('msg')!;
+  const mTitle = document.getElementById('m-title')!;
+  const hintTpl = document.getElementById('hint') as HTMLTemplateElement;
+
+  const rg = startReadguide(paper, guide);
+
+  // 新建的草稿按栏目存，编辑的按「栏目 + 地址」存 —— 改哪篇文章的草稿不会串到另一篇上
+  const DRAFT = mode === 'edit' ? `blog-draft:${col}:${fixedSlug}` : `blog-draft:${col}`;
+  // 中文标题转不出 ASCII 的 slug，兜底给一个带时间的名字（认得出，也不撞车）
+  const now = new Date();
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  const fallbackSlug = `post-${now.getFullYear()}${p2(now.getMonth() + 1)}${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}`;
+
+  const slugify = (s: string) =>
+    s
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60);
+
+  // ---- 大标题以下整体换成排好的正文 ----
+  // 渲染结果必须直接挂在 .prose 底下当子元素：阅读导引扫的就是 paper.children，
+  // 中间套一层 div 的话标题就不是直接子元素，长刻度和红球全都数不到。
+  function setBody(html: string) {
+    while (mTitle.nextSibling) mTitle.nextSibling.remove();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    while (tmp.firstChild) paper.appendChild(tmp.firstChild);
+    if (!html.trim()) paper.appendChild(hintTpl.content.cloneNode(true));
+  }
+
+  // 排版引擎只在真要排版时才拉进来（shiki 的语法包和 KaTeX 加起来不小，
+  // 而且只有这一页用得上，不该进其他页的包）
+  let renderMarkdown: ((markdown: string) => Promise<string>) | null = null;
+  async function renderer() {
+    if (!renderMarkdown) {
+      say('加载排版引擎');
+      const { createRenderer } = await import('../../lib/render');
+      renderMarkdown = (await createRenderer()).render;
+    }
+    return renderMarkdown;
+  }
+
+  function say(text: string, isError = false) {
+    msgEl.textContent = text;
+    msgEl.classList.toggle('is-error', isError);
+  }
+
+  let timer = 0;
+  let draftTimer = 0;
+  function schedule() {
+    clearTimeout(timer);
+    timer = window.setTimeout(refresh, 350);
+    clearTimeout(draftTimer);
+    draftTimer = window.setTimeout(storeDraft, 700);
+  }
+
+  async function refresh() {
+    const md = bodyEl.value;
+    mTitle.textContent = titleEl.value.trim() || '未命名';
+    if (!md.trim()) {
+      setBody('');
+      rg.rescan();
+      return;
+    }
+    say('排版中');
+    try {
+      const render = await renderer();
+      const html = await render(md);
+      // 等结果这段时间里用户又敲了字就丢掉这一份，排下一轮
+      if (bodyEl.value !== md) return schedule();
+      setBody(html);
+      say('');
+    } catch (e) {
+      say((e as Error).message, true);
+    }
+    rg.rescan();
+  }
+
+  function storeDraft() {
+    try {
+      localStorage.setItem(DRAFT, JSON.stringify({ title: titleEl.value, slug: slugEl.value, body: bodyEl.value }));
+    } catch {}
+  }
+
+  let slugTouched = mode === 'edit';
+  slugEl.addEventListener('input', () => {
+    slugTouched = true;
+    schedule();
+  });
+  titleEl.addEventListener('input', () => {
+    if (!slugTouched) slugEl.value = slugify(titleEl.value) || fallbackSlug;
+    schedule();
+  });
+  bodyEl.addEventListener('input', schedule);
+
+  async function saveArticle() {
+    say('保存中');
+    try {
+      const render = await renderer();
+      const html = await render(bodyEl.value);
+      const res = await fetch('/write/api/post', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode,
+          column: col,
+          title: titleEl.value.trim(),
+          slug: mode === 'edit' ? fixedSlug : slugEl.value.trim(),
+          markdown: bodyEl.value,
+          html,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error ?? `HTTP ${res.status}`);
+      try {
+        localStorage.removeItem(DRAFT);
+      } catch {}
+      say('已存好');
+      // 库里现查，不用等任何东西重建：存完直接就能打开
+      location.assign(data.url);
+    } catch (e) {
+      say((e as Error).message, true);
+    }
+  }
+
+  desk.addEventListener('submit', (e) => {
+    e.preventDefault();
+    saveArticle();
+  });
+  addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      saveArticle();
+    }
+  });
+
+  // 草稿回来：只在写作台是空的时候填。编辑已有文章时 textarea 由服务端填好了，
+  // 这里就不会动它 —— 免得把本地留过的旧草稿盖到线上那篇上
+  try {
+    const raw = localStorage.getItem(DRAFT);
+    if (raw && !titleEl.value && !slugEl.value && !bodyEl.value) {
+      const d = JSON.parse(raw);
+      titleEl.value = d.title ?? '';
+      slugEl.value = d.slug ?? '';
+      bodyEl.value = d.body ?? '';
+    }
+  } catch {}
+
+  refresh();
+</script>

@@ -1,5 +1,5 @@
 ---
-title: GLSL 入门笔记：从一张渐变开始
+title: "GLSL 入门笔记：从一张渐变开始"
 date: 2026-09-20
 column: test
 cover: /img/p3.jpg

@@ -1,30 +1,32 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
-import { COLUMNS } from '../../data/columns';
+import { columnOf } from '../../data/columns';
 import { allPosts, postsIn, fmtDate, updatedAt } from '../../lib/posts';
 
 // 栏目页 = 这个栏目下的文章列表。栏目本身只在 src/data/columns.ts 里定义，
-// 这里按注册表批量出页；文章归属靠 frontmatter 的 column 字段，加文章不用动这个文件。
-export async function getStaticPaths() {
-  const posts = await allPosts();
-  return COLUMNS.map((col) => ({
-    params: { slug: col.slug },
-    props: { col, posts: postsIn(posts, col.slug) },
-  }));
-}
+// slug 直接从路由段查；文章归属写在文章自己身上，加文章不用动这个文件。
+// 文章在 D1 里，所以这一页每次请求现查。
+export const prerender = false;
 
-const { col, posts } = Astro.props;
+const col = columnOf(Astro.params.slug!);
+if (!col) return Astro.redirect('/columns/');
+const posts = postsIn(await allPosts(env.DB), col.slug);
+// 刚写完的那篇要马上出现在这张列表里，所以别让边缘按 URL 共享缓存这一页
+Astro.response.headers.set('Cache-Control', 'private, max-age=0, must-revalidate');
 ---
 <Base title={`${col.name} · il7510n`}>
   <section class="wrap pagehead">
-    <h1 data-reveal style="--i:0">{col.name}</h1>
+    <!-- 栏目名就是「写这一栏」的入口。不再按登录状态藏起来：读者点进去只会撞到 Access
+         的登录页，真要写还得过接口验签（见 src/lib/access.ts），所以没有暴露什么。 -->
+    <h1 data-reveal style="--i:0"><a class="u writetitle" href={`/write/${col.slug}/`}>{col.name}</a></h1>
     <p class="count" data-reveal style="--i:1">共 {posts.length} 篇</p>
   </section>
   <section class="wrap">
     <div class="list">
       {posts.map((p, i) => (
-        <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>
-          <span class="t">{p.data.title}</span>
+        <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.slug}/`} data-pt={`row:${p.slug}`}>
+          <span class="t">{p.title}</span>
           <span class="m">{fmtDate(updatedAt(p))}</span>
         </a>
       ))}

@@ -1,4 +1,5 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../layouts/Base.astro';
 import { COLUMNS } from '../data/columns';
 import { allPosts, postsIn, columnName, fmtDate, updatedAt } from '../lib/posts';
@@ -16,19 +17,22 @@ const nameInkEm = (s: string) => {
   if ([...s].some((ch) => ch.codePointAt(0)! >= 0x2e80)) return 0.88;
   return /[gjpqy]/.test(s) ? 0.928 : 0.716;
 };
+// 文章在 D1 里，所以这一页每次请求现查（列表查询不带正文，只带目录信息）
+export const prerender = false;
+
 // 最后一张卡：全部文章，按各篇的最后更新时间倒序
-const posts = await allPosts();
+const posts = await allPosts(env.DB);
 let gi = 0;   // 海报卡的几何轮转指针（图片卡不参与轮转）
 const homeCols = COLUMNS.map((c) => {
   // 卡面的照片 = 这一栏里最新一篇带 cover 的文章的封面（深度图跟着一起带过来）。
   // 一篇带封面的都没有 —— 退回纯字的海报卡。
-  const art = postsIn(posts, c.slug).find((p) => p.data.cover);
+  const art = postsIn(posts, c.slug).find((p) => p.cover);
   const g = gi % GEO.length;
   if (!art) gi++;
   return {
     ...c,
-    cover: art?.data.cover,
-    depth: art?.data.depth,
+    cover: art?.cover,
+    depth: art?.depth,
     geo: art ? 'geo-img-band' : GEO[g],
     ink: !art && g === 1,
     nameH: nameInkEm(c.name),   // 字号按它算，见 global.css 的 .slot .pword
@@ -63,9 +67,6 @@ const homeCols = COLUMNS.map((c) => {
           d="M 1240 -80 C 1060 240, 1520 420, 1330 660 C 1180 850, 1020 880, 1120 980"
         ></path>
       </svg>
-
-      <!-- 流体层：鼠标指尖划过出彩虹烟（vendor 自 PavelDoGreat/WebGL-Fluid-Simulation, MIT） -->
-      <canvas id="fluid" aria-hidden="true"></canvas>
 
       <div class="track">
         <!-- 1 · Hero：白卡 + 阶梯缩进 + 黄圆 -->
@@ -122,9 +123,9 @@ const homeCols = COLUMNS.map((c) => {
           <div class="listpanel-card geo-frame">
             <div class="list">
               {posts.map((p) => (
-                <a class="row" href={`/blog/${p.id}/`} data-pt={`row:${p.id}`}>
-                  <span class="t">{p.data.title}</span>
-                  <span class="m">{columnName(p.data.column)} · {fmtDate(updatedAt(p))}</span>
+                <a class="row" href={`/blog/${p.slug}/`} data-pt={`row:${p.slug}`}>
+                  <span class="t">{p.title}</span>
+                  <span class="m">{columnName(p.column)} · {fmtDate(updatedAt(p))}</span>
                 </a>
               ))}
             </div>
@@ -156,11 +157,6 @@ const homeCols = COLUMNS.map((c) => {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   // 牌堆是否已完全展开（journey 块每帧更新）：倾斜跟随只在未展开时生效
   let deckUnfolded = false;
-
-  // 流体模拟：仅桌面加载（vendor 自 WebGL-Fluid-Simulation，MIT）
-  if (!mobile.matches && !reduced.matches) {
-    import('../scripts/fluid.js');
-  }
 
   // ── 图片卡悬停 ────────────────────────────────────────────────────────────────
   // ① 散焦 → 一次性对焦：纯 CSS 动画，状态挂 .slot（不是 :hover —— 弯成 11 条时克隆片是

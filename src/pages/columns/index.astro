@@ -1,10 +1,14 @@
 ---
+import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
 import { COLUMNS } from '../../data/columns';
 import { allPosts, postsIn } from '../../lib/posts';
 
+// 每栏几篇文章要看库，所以这一页每次请求现查
+export const prerender = false;
+
 // 栏目只在 src/data/columns.ts 里定义，这一页就是那张注册表（顺序也来自它）。
-const posts = await allPosts();
+const posts = await allPosts(env.DB);
 const rows = COLUMNS.map((c) => ({ ...c, n: postsIn(posts, c.slug).length }));
 ---
 <Base title="栏目 · il7510n">

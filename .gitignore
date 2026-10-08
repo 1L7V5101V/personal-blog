@@ -25,3 +25,8 @@ pnpm-debug.log*
 
 # 本地 agent 说明，不入库
 AGENTS.md
+
+# wrangler 本地运行时状态（本地 D1 库、缓存）
+.wrangler/
+# 手动跑命令时留下的日志
+*.log

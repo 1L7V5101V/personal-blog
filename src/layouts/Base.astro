@@ -21,6 +21,10 @@ const EMAIL = 'hi@il7510n.dpdns.org';
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤍</text></svg>" />
   </head>
   <body>
+    <!-- 鼠标光晕：指针处一团红光，全站一层，垫在内容之下（只照黑场）。
+         位置每帧由 mouse-light 写 transform（样式见 global.css 的 .mouselight）。 -->
+    <div class="mouselight" aria-hidden="true"></div>
+
     <!-- 顶部遮罩：最上面实底、往下渐变透明，带一点模糊。
          给 ECG 和顶栏文字一条干净的「顶棚」，正文从底下化出来。
          ⚠ 高度要短（76px）：backdrop-filter 每帧都要对背板重新模糊，
@@ -52,6 +56,8 @@ const EMAIL = 'hi@il7510n.dpdns.org';
       import Lenis from 'lenis';
       // 点开卡片 / 返回的整页过渡（模块先于本脚本与各页脚本执行）
       import '../scripts/page-transition';
+      // 鼠标光晕：全站一层，指针处的那团红光
+      import '../scripts/mouse-light';
 
       const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 

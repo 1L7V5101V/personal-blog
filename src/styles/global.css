@@ -70,6 +70,39 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
 
 .wrap { width: min(var(--measure), calc(100vw - 3rem)); margin-inline: auto; }
 
+/* ---------- 鼠标光晕（全站，Base.astro 里的一层）----------
+   指针处的一团红光，替代原先首页的流体层。形式同卡面那层表面光（.is-tilt::after）：
+   圆心就在光标处，边缘软，不外加发光。
+   垫在所有内容之下（z-index -1，落在 html 的黑底之上）：光只照黑场，不压在卡和白纸上，
+   白卡白纸上透出来的那圈红边就是「光在场里」（同 .lightbar 的取舍）。
+   颜色用 --accent —— 全站最亮的那个红，也是唯一会发光的红。
+   位置由 JS 每帧写 transform（走 __fx 的统一 rAF），所以点亮时自成一层。
+   JS 那边的开关是「有鼠标的设备 + 不要求减少动效 + 宽度 > 768px」（见 src/scripts/mouse-light.ts），
+   条件不满足时这层一直是 opacity 0，也不给它合成层。 */
+.mouselight {
+  --size: clamp(280px, 41vmax, 650px);
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: var(--size);
+  height: var(--size);
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.45s var(--ease-out);
+  /* 中段给个台阶、尾段化得慢，不出硬边 */
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--accent) 26%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 13%, transparent) 28%,
+    transparent 48%
+  );
+}
+.mouselight.is-on { opacity: 1; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .mouselight { will-change: transform; }
+}
+
 /* ---------- 顶部遮罩 ----------
    最上面实底，往下渐变透明，带模糊。
    替代原先 topnav 自己那条渐变：两条叠起来会把白卡顶部压成一道死灰边。
@@ -206,7 +239,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   opacity: 0.92;
 }
 /* 白光 + 红晕：全站只有这一处是纯白高亮。
-   放在 .hline 那一层（z-index 2）—— 在流体之上、在轨道之下，光是打在场景里的，不是打在卡片上的。 */
+   放在 .hline 那一层（z-index 2）—— 在轨道之下，光是打在场景里的，不是打在卡片上的。 */
 .lightbar {
   position: absolute;
   inset: 0;
@@ -227,16 +260,6 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .hline path:nth-child(1) { stroke: var(--light); }
 .hline path:nth-child(2) { stroke: var(--light); stroke-width: 10; opacity: 0.5; }
 .hline path:nth-child(3) { stroke: var(--accent); stroke-width: 10; }
-
-/* 流体层：指尖划过的彩虹烟 */
-#fluid {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  pointer-events: none;
-}
 
 /* 悬停：卡片内容轻微放大 */
 .slot .hero-card, .slot .hcard, .slot .poster, .slot .listpanel-card {
@@ -681,6 +704,9 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .pagehead { padding-top: 16vh; padding-bottom: 3rem; }
 .pagehead h1 { font-size: clamp(2.4rem, 6vw, 4rem); margin: 0; }
 .count { color: var(--fg-3); font-size: 0.9rem; }
+/* 栏目名就是写这一栏的入口（见 columns/[slug].astro）：平时跟标题同色，
+   悬停才红 —— 红是全站唯一的可交互信号色，那条 .u 的下划线也跟着变红 */
+.u.writetitle:hover { color: var(--accent); }
 
 .list { display: flex; flex-direction: column; }
 .row {
@@ -830,6 +856,24 @@ footer.site {
   border-bottom: 1.5px solid var(--ink);
   white-space: nowrap;
 }
+/* 六家综合排行那张 11 列表（表体由 src/lib/rank-table.ts 从数据生成，写在文章正文里）。
+   表比正文密：字号收到 0.86rem，内边距收紧，数字列右对齐。
+   ⚠ .prose 的第二列 nowrap 是给术语表加的，这里必须翻回 normal 长题目才能折行 ——
+   .prose .rank .ttl 三个类比 .prose td:nth-child(2) 的两个类加一个元素高，压得过。 */
+.prose .rank { font-size: 0.86rem; min-width: 44rem; }
+.prose .rank th,
+.prose .rank td { padding: 0.42em 0.5em; }
+.prose .rank .ttl { white-space: normal; }
+.prose .rank .num { text-align: right; font-variant-numeric: tabular-nums; }
+.prose .rank th.num { text-align: right; }
+.prose .rank .no { color: var(--ink-3); font-size: 0.82em; margin-right: 0.45em; }
+.prose .rank .pr { color: var(--ink-3); font-size: 0.78em; margin-left: 0.15em; }
+.prose .rank .off { color: var(--ink-3); }
+.prose .rank .total { color: var(--ink); font-weight: 650; }
+.prose .rank tbody tr:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+/* 纸面左右各留 20%，窄屏装不下 11 列时让表自己横滚 */
+.prose .scroll { overflow-x: auto; }
+.prose .fine { color: var(--ink-3); font-size: 0.92rem; }
 .prose hr {
   height: 0;
   margin: 2.6em 0;
@@ -983,6 +1027,116 @@ footer.site {
   .readguide { display: none; }
 }
 
+/* ============================================================
+   站上写作（/write/栏目/，只在本地 dev 出现）
+   ------------------------------------------------------------
+   纸面复用文章页那一张（.prose .paper + 上面整段阅读导引），底下压一块写作台：
+   上面写 Markdown，纸上实时排出来。所以这一节只有「台子」是新东西，
+   标尺 / 红线 / 红球 / 排版全走文章页已有的规则。
+   ⚠ 台子是实底 --bg，不给 backdrop-filter：底部 dock 当初就是因为每帧模糊的
+   代价被整个删掉的（见「暗色系下的硬规则」第 3 条），别再犯一遍。
+   ============================================================ */
+.writing {
+  /* 纸面要能整张滚到台子上方，不然读到文末就被 fixed 的台子压住 */
+  padding-bottom: calc(38vh + 6rem);
+}
+.paper .hint { color: var(--ink-3); }
+.prose p.hint { color: var(--ink-3); }
+
+.desk {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;                 /* 在纸面和阅读导引之上、顶栏和 ECG 之下 */
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  height: 38vh;
+  min-height: 250px;
+  padding: 0.9rem max(1.5rem, calc(50% - 25.25rem)) 1rem;
+  background-color: var(--bg);
+  border-top: 1px solid var(--hairline);
+}
+/* 台子对齐纸上的那一栏：纸宽 min(84.2rem, …)，左右内边距各 20% → 文字栏 0.6 倍 */
+.desk__fields { display: flex; align-items: baseline; gap: 1.5rem; }
+.fld {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--fg-3);
+}
+.fld--title { flex: 1 1 18rem; min-width: 0; }
+.fld--slug { flex: 0 1 22rem; }
+.fld input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  color: var(--fg);
+  font: inherit;
+  padding: 0.1rem 0.2rem 0.25rem;
+  cursor: text;
+  transition: border-color 0.3s;
+}
+.fld input:focus { outline: none; border-bottom-color: var(--accent); }
+.fld input::placeholder { color: var(--fg-3); }
+.path {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  color: var(--fg-3);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.desk__src {
+  flex: 1;
+  min-height: 0;               /* flex 列里不给这条，textarea 撑破台子 */
+  background: none;
+  border: 0;
+  border-radius: 0;
+  color: var(--fg-2);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  resize: none;
+  cursor: text;
+}
+.desk__src:focus { outline: none; color: var(--fg); }
+.desk__src::placeholder { color: var(--fg-3); }
+
+.desk__bar { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; }
+.desk__msg { flex: 1; font-size: 0.82rem; color: var(--fg-3); }
+.desk__msg.is-error { color: var(--accent); }
+.desk__save {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  border: 0;
+  background-color: var(--accent);
+  color: var(--bg);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  transition: filter 0.3s;
+}
+.desk__save:hover { filter: brightness(1.12); }
+.desk__save em { font-style: normal; font-size: 0.75rem; opacity: 0.65; }
+
+/* 窄屏：台子不悬浮了（38vh 的 fixed 盖住半屏，纸面没法看），改成跟在纸面后面 */
+@media (max-width: 768px) {
+  .desk { position: static; height: auto; min-height: 0; }
+  .desk__src { min-height: 45vh; }
+  .writing { padding-bottom: 3rem; }
+}
+
 /* ---------- About 时间线 ---------- */
 .timeline { position: relative; padding-left: 2rem; }
 .timeline svg.tl {
@@ -1098,7 +1252,7 @@ html.pt-arrive .article {
   .slot, .heroeslot, .listpanel, .manifesto, .endpanel { width: 88vw; min-width: 88vw; }
   .slot, .panel { scroll-snap-align: center; }
   .hline { display: none; }
-  #fluid { display: none; }
+  .mouselight { display: none; }
   /* 小屏卡片窄，色块圆会压到标题上。
      ⚠ 用 `translate` / `scale` 独立属性，**不要用 `transform`**：
      这些 span 的 width / right / top / transform 都是行内样式，内联的 transform
