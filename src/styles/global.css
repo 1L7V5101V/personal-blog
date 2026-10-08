@@ -189,7 +189,15 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   transition: transform 0.24s var(--ease-out);
 }
 .u:hover { color: var(--fg); }
-.u:hover::after { transform: scaleX(1); transform-origin: left; }
+/* 下划线是位移，同样只给真鼠标：触屏上点完会黏住，读者并没有选择「悬停」这个状态。 */
+@media (hover: hover) and (pointer: fine) {
+  .u:hover::after { transform: scaleX(1); transform-origin: left; }
+}
+/* 键盘走位要有同等线索：以前全站没有任何 :focus-visible 样式，
+   Tab 到导航链接时除了浏览器默认那圈描边，这个站自己什么都不表示。
+   这里只加东西、不摘默认描边。 */
+.u:focus-visible { color: var(--fg); }
+.u:focus-visible::after { transform: scaleX(1); transform-origin: left; }
 
 /* ---------- 进场 stagger ---------- */
 /* 两套触发方式（loaded 一次性 / IntersectionObserver 逐批），但只有进场这一件事，
@@ -281,8 +289,14 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   transition: transform 0.45s var(--ease-out);
   will-change: transform;
 }
-.slot:hover .hero-card, .slot:hover .hcard, .slot:hover .poster, .slot:hover .listpanel-card {
-  transform: scale(1.025);
+/* 悬停：卡片内容轻微放大。位移类的悬停反馈要门控 —— 触屏上点一下也会点亮 :hover，
+   而且会一直挂着到点别处为止；项目文档里「展开后悬停放大退场」是靠 JS 挂的
+   .deck-unfolded 类实现的，而那个类只在 journey 的 rAF 块里加，窄屏和减动效两个分支
+   都不跑那段代码，所以那些设备上「黏住的放大」没有任何东西压得住。 */
+@media (hover: hover) and (pointer: fine) {
+  .slot:hover .hero-card, .slot:hover .hcard, .slot:hover .poster, .slot:hover .listpanel-card {
+    transform: scale(1.025);
+  }
 }
 /* 完全展开后的 journey 段：悬停放大整个退场（堆叠阶段保留）。
    .deck-unfolded 由 JS 随展开进度挂到 .journey 上（见 index.astro 的 deckUnfolded）。
@@ -1152,7 +1166,9 @@ footer.site {
   font-size: 0.85rem;
   padding: 0.4rem 0.85rem;
   cursor: pointer;
-  transition: filter 0.3s;
+  /* transform 也在这一条里：按压缩小归这个块自己管，别处不再另开一份 transition
+     （两条 transition 互相覆盖，最后生效的是文件里靠后的那条 —— 这种账最难查） */
+  transition: filter 0.24s var(--ease-out), transform 160ms var(--ease-out);
 }
 .desk__save:hover { filter: brightness(1.12); }
 .desk__save em { font-style: normal; font-size: 0.75rem; opacity: 0.65; }
@@ -1272,23 +1288,34 @@ html.pt-arrive .article {
      一张瓦片，每次描线都要重画整张 —— 合成层省的是「内容不动只挪位置」的那类重绘。 */
 }
 
-@media (max-width: 768px) {
+/* ---------- 静态兜底：窄屏 或 要求减少动效 ---------- */
+/* 这两条要的布局是同一件事：牌堆摊平成一条能原生横滑的带子。
+   以前这份配方只在 (max-width: 768px) 里写了一遍，而下面减动效那块又自己写了一份
+   `overflow: visible` 的版本 —— 两个块的选择器特异性相同、减动效那份在文件里更靠后，
+   于是「窄屏 + 减动效」这个很常见的组合被后面那份作废掉，文档里写的
+   「移动端横滑退化为原生 swipe」对这些人其实不成立。合到一处写一次就没这问题。 */
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
   .journey { height: auto !important; }
   .stage {
     position: static;
     height: auto;
-    overflow-x: auto;
+    overflow-x: auto;        /* 不是 visible：横向滚动是读者拿到其余那几张卡的唯一途径 */
     overflow-y: hidden;
     scroll-snap-type: x proximity;
     padding-block: 5rem;
-    scrollbar-width: none;
   }
-  .stage::-webkit-scrollbar { display: none; }
   .track { transform: none !important; gap: 1.5rem; padding-inline: 1.5rem; }
-  .slot, .heroeslot, .listpanel, .manifesto, .endpanel { width: 88vw; min-width: 88vw; }
   .slot, .panel { scroll-snap-align: center; }
   .hline { display: none; }
   .mouselight { display: none; }
+}
+
+/* ---------- 窄屏特有的尺寸调整 ---------- */
+@media (max-width: 768px) {
+  /* 手机上不露滚动条，靠 swipe；桌面减动效那条要留着可见的滚动条当线索 */
+  .stage { scrollbar-width: none; }
+  .stage::-webkit-scrollbar { display: none; }
+  .slot, .heroeslot, .listpanel, .manifesto, .endpanel { width: 88vw; min-width: 88vw; }
   /* 小屏卡片窄，色块圆会压到标题上。
      ⚠ 用 `translate` / `scale` 独立属性，**不要用 `transform`**：
      这些 span 的 width / right / top / transform 都是行内样式，内联的 transform
@@ -1304,14 +1331,50 @@ html.pt-arrive .article {
   .slot .pword { --cardw: 88vw; }
 }
 
-/* ---------- reduced motion ---------- */
+/* ---------- reduced motion：少动、动得轻，不是什么都不动 ---------- */
 @media (prefers-reduced-motion: reduce) {
+  /* 位移和缩放一类：不做。它们是「晃」的来源，而卡面上并没有别的东西在表达悬停 ——
+     列表行变红、下划线到位、颜色过渡都还在。 */
+  .slot:hover .hero-card,
+  .slot:hover .hcard,
+  .slot:hover .poster,
+  .slot:hover .listpanel-card,
+  .slot:hover .poster .pdot { transform: none !important; }
+  /* 下划线展开和散焦→对焦改的是几何与模糊量，抹平到一帧：状态仍然看得见
+     （线在、图清晰），只是不再扫过来。 */
+  .u::after,
+  .hcard img,
+  .hcard .fdpt { transition-duration: 0.01ms !important; }
+  /* 动画整条压到一帧：17px 模糊的来回、升起这类位移都留不住。
+     ⚠ 这里不再对 * 下 transition-duration —— 一刀切会连带抹掉颜色和透明度的过渡，
+     而它们是帮助理解的反馈（正文链接变红、时间线走到哪一条、写作台输入框的焦点下划线），
+     把它们压成 0ms 硬跳比慢慢过渡更难跟读。 */
   *, *::before, *::after {
-    transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
   [data-reveal], [data-io] { opacity: 1 !important; transform: none !important; }
-  .journey { height: auto !important; }
-  .stage { position: static; height: auto; overflow: visible; }
-  .track { transform: none !important; flex-wrap: wrap; }
 }
+
+/* ============================================================
+   按压反馈
+   ------------------------------------------------------------
+   以前全站没有一条 :active 规则（grep 过整个 src/），窄屏上页面过渡又整个放行
+   （page-transition 的 small 分支），所以手指按下一张卡或一行、到页面真的变化之间，
+   屏幕上什么都没有 —— 唯一的回应是平台那个默认灰闪。桌面上有 hover 和过渡兜着，
+   触屏上这两样都不存在，所以这个缺口只在手机上完全裸露。
+   按下收拢到 0.97、抬手 160ms 弹回：这是给「按下去」这个动作本身的反馈，不是装饰，
+   所以比悬停更快、幅度更小（0.97 是上限，不是目标）。
+   ============================================================ */
+[data-copy] {
+  /* 这条必须把 color 一起写上：选择器权重和 .u 相同、位置更靠后，
+     只写 transform 会把 .u 那条颜色过渡整个盖掉。 */
+  transition: color 0.24s var(--ease-out), transform 160ms var(--ease-out);
+}
+.desk__save:active,
+[data-copy]:active { transform: scale(0.97); }
+/* 列表行按下去就用它悬停那同一个信号色 —— 手机上读者没有别的机会知道点到了 */
+.row:active .t { color: var(--accent); }
+/* 把平台那个灰闪换成站点自己的红：「按到了」这件事从此有形状 */
+a,
+button { -webkit-tap-highlight-color: color-mix(in srgb, var(--accent) 16%, transparent); }
