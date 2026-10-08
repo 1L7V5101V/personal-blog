@@ -46,10 +46,25 @@ import Base from '../layouts/Base.astro';
 
   if (tl && line) {
     (window as any).__fx = (window as any).__fx || [];
-    (window as any).__fx.push(() => {
+    // getBoundingClientRect 每帧读一次 = 每帧强制同步布局。这条线的版位只在
+    // 尺寸变化 / 字体到位 / 内容变化时才动，所以量一次缓存起来，事件来了再重量。
+    let top = 0, h = 0, lastOff = '';
+    const measure = () => {
       const r = tl.getBoundingClientRect();
-      const p = Math.min(1, Math.max(0, (innerHeight * 0.75 - r.top) / r.height));
-      line.style.strokeDashoffset = String(1 - p);
+      top = r.top + scrollY;   // 存文档坐标：每帧只读 scrollY，不碰 DOM
+      h = r.height;
+    };
+    measure();
+    addEventListener('resize', measure);
+    addEventListener('load', measure);
+    document.fonts?.ready.then(measure);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measure).observe(tl);
+    (window as any).__fx.push(() => {
+      const p = h > 0 ? Math.min(1, Math.max(0, (innerHeight * 0.75 - (top - scrollY)) / h)) : 0;
+      const v = (1 - p).toFixed(3);
+      if (v === lastOff) return;
+      lastOff = v;
+      line.style.strokeDashoffset = v;
     });
   }
 </script>

@@ -90,10 +90,27 @@ d += ` L ${W} ${f(BASE + drift(W))}`;   // 收尾补一小段平路
   const fg = box?.querySelector<SVGPathElement>('.ecg-fill .fg');
   if (box && fg) {
     window.__fx = window.__fx || [];
+    // scrollHeight 是布局相关的读：放在每帧开头会把上一帧攒下的样式失效刷成一次
+    // 全量重算 + 布局，然后下一帧再来一遍。这里改成事件驱动地量。
+    let max = 0;
+    let lastOff = '';
+    const measure = () => { max = document.documentElement.scrollHeight - innerHeight; };
+    measure();
+    addEventListener('resize', measure);
+    addEventListener('load', measure);
+    document.fonts?.ready.then(measure);
+    // 写作页重新排版会让文档变高，ResizeObserver 是事件驱动的，不用每帧去问
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measure).observe(document.documentElement);
     window.__fx.push(() => {
-      const max = document.documentElement.scrollHeight - innerHeight;
+      // 首页走纸式建成后 fill 层被 .ecg-is-strip 藏起来了，没必要再描它；
+      // 但移动端 / 减动效下 build() 永不发生，fill 层就是那根可见的进度条 —— 所以判断挂在类上，
+      // 不能挂在「标记里有没有走纸层」上，否则会把那条兜底一起删掉。
+      if (box.classList.contains('ecg-is-strip')) return;
       const p = max > 0 ? Math.min(1, Math.max(0, scrollY / max)) : 0;
-      fg.style.strokeDashoffset = String(1 - p);
+      const v = (1 - p).toFixed(3);
+      if (v === lastOff) return;   // strokeDashoffset 是绘制属性：值没变就别让它重绘
+      lastOff = v;
+      fg.style.strokeDashoffset = v;
     });
   }
 
