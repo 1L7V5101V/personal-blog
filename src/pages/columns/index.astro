@@ -19,7 +19,7 @@ const rows = COLUMNS.map((c) => ({ ...c, n: postsIn(posts, c.slug).length }));
   <section class="wrap">
     <div class="list">
       {rows.map((c, i) => (
-        <a class="row" data-io style={`--i:${i % 4}`} href={`/columns/${c.slug}/`} data-pt={`col:${c.slug}`}>
+        <a class="row" data-io style={`--i:${i}`} href={`/columns/${c.slug}/`} data-pt={`col:${c.slug}`}>
           <span class="t">{c.name}</span>
           <span class="m">{c.n} 篇</span>
         </a>

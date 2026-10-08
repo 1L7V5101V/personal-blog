@@ -17,7 +17,7 @@ const posts = await allPosts(env.DB);
   <section class="wrap">
     <div class="list">
       {posts.map((p, i) => (
-        <a class="row" data-io style={`--i:${i % 4}`} href={`/blog/${p.slug}/`} data-pt={`row:${p.slug}`}>
+        <a class="row" data-io style={`--i:${i}`} href={`/blog/${p.slug}/`} data-pt={`row:${p.slug}`}>
           <span class="t">{p.title}</span>
           <span class="m">{columnName(p.column)} · {fmtDate(updatedAt(p))}</span>
         </a>
