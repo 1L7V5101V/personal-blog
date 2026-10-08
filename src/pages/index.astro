@@ -196,7 +196,8 @@ void main(){
       const img = slot.querySelector<HTMLImageElement>('.hcard img');
       if (!card || !img) return;   // 只有图片卡（.hcard）有对焦效果
 
-      let focusTimer = 0;
+      let defocusTimer = 0;
+      let focusedOnce = false;
       const para: Para | null = cv ? {
         slot, cv, img, gl: null, uni: {},
         crop: [1, 1], tx: 0, ty: 0, x: 0, y: 0, dirty: false, failed: false, uploaded: false,
@@ -275,16 +276,26 @@ void main(){
 
       slot.addEventListener('pointerenter', (e) => {
         if (e.pointerType !== 'mouse') return;
-        slot.classList.add('is-hovering');
-        // 用定时器而不是 animationend 打 is-focused：动画若被弯牌中断，animationend 不会触发，
-        // 之后每次弯/不弯切换都会重播一次散焦 —— 滑动时就是一连串闪烁。
-        clearTimeout(focusTimer);
-        focusTimer = window.setTimeout(() => slot.classList.add('is-focused'), 1000);
+        // 散焦只跑一次：图在被指针碰到之前是清的、之后也还是清的，这个效果不携带任何状态，
+        // 而这张卡是轨道里第一张 —— 谁要够到别的卡都得先掠过它。每次掠过重放一遍
+        // 九百毫秒的糊，按频率表就是「该删或者大幅缩小」那一档；留一次，当作牌堆摊开时
+        // 镜头对上的那一下。
+        // 切片期间不起手：弯牌时克隆片没有过渡历史，会和本体错开一帧的模糊量。
+        if (!focusedOnce && !slot.classList.contains('is-bent')) {
+          clearTimeout(defocusTimer);
+          slot.classList.add('is-defocus');
+          defocusTimer = window.setTimeout(() => {
+            slot.classList.remove('is-defocus');   // 交还给那条 0.55s 的过渡单调拉回清晰
+            focusedOnce = true;
+          }, 140);
+        }
         init();
       });
       slot.addEventListener('pointerleave', () => {
-        clearTimeout(focusTimer);
-        slot.classList.remove('is-hovering', 'is-focused');
+        // 中途松手也要收尾：过渡会从当前那个模糊量接着往清晰走，不会跳帧
+        clearTimeout(defocusTimer);
+        slot.classList.remove('is-defocus');
+        focusedOnce = true;
         if (para) { para.tx = 0; para.ty = 0; para.dirty = true; }
       });
       slot.addEventListener('pointermove', (e) => {

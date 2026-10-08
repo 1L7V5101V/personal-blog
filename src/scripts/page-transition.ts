@@ -98,7 +98,7 @@ function cardRadius(anchor: Element) {
 /** 拍一张"平卡"快照：剥掉弯曲切片 / 视差画布 / 内联 transform，克隆才和真卡对得上 */
 function flatClone(anchor: Element): HTMLElement {
   const c = anchor.cloneNode(true) as HTMLElement;
-  c.classList.remove('is-bent', 'is-hovering', 'is-focused');
+  c.classList.remove('is-bent', 'is-defocus');
   c.removeAttribute('id');
   c.removeAttribute('href');
   c.querySelectorAll('.bend-seg').forEach((s) => s.remove());

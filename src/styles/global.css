@@ -573,19 +573,24 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   background-color: var(--card);   /* 图片没加载出来时的底 */
 }
 /* 图片卡悬停：① 散焦 → 一次性对焦　② 鼠标视差（深度图 + WebGL 逐像素位移，见 index.astro）
-   ⚠ 悬停状态挂在 .slot 上（is-hovering），不用 :hover —— 卡片弯成 11 条时，克隆片是
+   ⚠ 悬停状态挂在 .slot 上（is-defocus），不用 :hover —— 卡片弯成 11 条时，克隆片是
    pointer-events:none 的副本，永远匹配不到 :hover，只有本体（中条）会动，接缝立刻穿帮。
    槽位是本体和克隆的共同祖先，状态挂在它身上两边一起动。
    .fdpt 是叠在 <img> 上的视差画布：没鼠标移动时它画的像素和 <img> 完全一样（同一张图、
-   同样的 object-fit: cover 映射），所以两者必须一起做对焦/一起被切片禁用，否则会露出「一半糊」。 */
+   同样的 object-fit: cover 映射），所以两者必须一起做散焦/一起被切片禁用，否则会露出「一半糊」。 */
 .hcard img,
 .hcard .fdpt {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: filter 0.5s var(--ease-out);
-  will-change: filter;
+  /* 拉回清晰走这条过渡（0.55s 的强 ease-out = 前快后慢，像镜头收力落焦）。
+     ⚠ 全程必须单调、不冲过焦点、不回抽：拉风箱式来回虽然更像真镜头，但画面糊一下
+     清一下再糊一下，看久了头晕 —— 所以这里只用 y 不越界 [0,1] 的曲线，别换成弹簧。
+     will-change: filter 摘掉了：它让 <img> 和画布各自常驻一张卡大小的合成层，
+     而这个效果整页只跑一次；把提示改到真在糊起来的那一刻再给也没意义 ——
+     那一刻层才刚建，省下的钱当场就花回去。 */
+  transition: filter 0.55s var(--ease-out);
 }
 .hcard .fdpt {
   position: absolute;
@@ -604,40 +609,20 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   transition: none;
 }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .slot.is-hovering .hcard img,
-  .slot.is-hovering .hcard .fdpt {
-    /* 曲线由两段关键帧各自给出（0% 和 13% 上的 animation-timing-function 已经覆盖了
-       整条时间线），所以这里不要再挂 var(--ease-out) —— 它永远不会生效，只会让人以为
-       这个动画跟着全站那个缓动 token 走。 */
-    animation: hcard-focus 900ms forwards;
-  }
-  /* 已经对完焦、或正在弯牌切片时，别让散焦动画跑起来：
-     ① 切片是 cloneNode 快照，晚建的克隆动画相位和本体对不上 → 接缝一半糊一半清；
-     ② 弯牌时 11 条切片各自跑 blur 动画，栅格开销直接 ×11。
-     两种情况都退回清晰态（is-focused 由 JS 定时器打上，不依赖 animationend，被中断也能收尾）。 */
-  .slot.is-focused .hcard img,
-  .slot.is-bent .hcard img,
-  .slot.is-focused .hcard .fdpt,
-  .slot.is-bent .hcard .fdpt {
-    animation: none;
-  }
-}
-/* 对焦曲线：散焦 → 一次拉回、平滑落定。刻意「不冲过焦点、不回抽」——
-   拉风箱式来回虽然像真镜头，但画面糊一下清一下再糊一下，看久了头晕。 */
-@keyframes hcard-focus {
-  0% {
-    filter: blur(0px) saturate(1) brightness(1);
-    animation-timing-function: cubic-bezier(0.2, 0.85, 0.3, 1);
-  }
-  13% {
+  /* 散焦：只在第一次悬停时糊起来，剩下的拉回交给上面那条过渡。
+     这里用 transition 而不是 @keyframes —— 悬停是一个可以反复、可以中途反悔的状态，
+     而关键帧每次都得从 0% 重放：动画中途离开再进来，0% 那一帧是 blur(0)，
+     于是画面先「啪」一下清晰、再跳回 17px 糊 —— 正是原来注释里说要避开的拉风箱，
+     只是它改从打断这条路进来了。过渡会从当前值接着走，打断不会跳。
+     切片期间不用再加「关掉」的守卫：.slot.is-bent .hcard img 已经把过渡掐了，
+     本体和克隆（新建元素、没有过渡历史、一上来就是终值）于是落在同一个值上，
+     接缝不会一半糊一半清。 */
+  .slot.is-defocus .hcard img,
+  .slot.is-defocus .hcard .fdpt {
     filter: blur(17px) saturate(0.72) brightness(0.9);
-    animation-timing-function: cubic-bezier(0.16, 0.7, 0.24, 1);   /* 前快后慢 = 像镜头收力落焦，且全程单调不越界 */
-  }
-  100% {
-    filter: blur(0px) saturate(1) brightness(1);
+    transition-duration: 0.14s;   /* 糊起来要快，拉回才慢 */
   }
 }
-
 /* 字体海报卡：巨型裁切文字 + 色块圆，纯白无框 */
 .poster {
   position: relative;
