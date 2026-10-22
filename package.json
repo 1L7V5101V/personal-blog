@@ -15,7 +15,8 @@
     "posts:seed": "node scripts/build-rank-table.mjs && node scripts/import-posts.mjs",
     "posts:export": "node scripts/export-posts.mjs",
     "posts:export:remote": "node scripts/export-posts.mjs --remote",
-    "render:check": "node scripts/check-render.mjs"
+    "render:check": "node scripts/check-render.mjs",
+    "render:blocks": "node scripts/check-blocks.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.4",

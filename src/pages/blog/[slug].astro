@@ -6,8 +6,10 @@ import { canWrite } from '../../lib/access';
 // KaTeX 按页引入：只有文章页需要公式，不往首页/列表页发
 import 'katex/dist/katex.min.css';
 
-// 正文在 D1 的 body_html 列里（保存那一刻排好的），所以这一页每次请求现查。
-// 不在请求里跑 Markdown/KaTeX：那篇最长的笔记排一次要 675ms CPU。
+// 库里只有 Markdown 源文，正文由**读者的浏览器**用 src/lib/render.ts 现排（见页面底部那段
+// 脚本）。服务端不在请求里排任何东西：Workers Free 每个请求只有 10ms CPU，而实测排那篇
+// 21.6KB 的长笔记要 675ms。源文先原样摆在纸面上，排好了再换掉 —— 没有 JavaScript 的读者
+// 看到的是一份能读的源文，不是一张白纸。
 export const prerender = false;
 
 const post = await postBySlug(env.DB, Astro.params.slug!);
@@ -18,9 +20,10 @@ if (!post) return Astro.redirect('/blog/');
 const showWrite = await canWrite(Astro.request, env) || Astro.cookies.get('canwrite')?.value === '1';
 if (showWrite) Astro.response.headers.set('Cache-Control', 'private, max-age=0, must-revalidate');
 
-// 正文 HTML 是站上写作时由浏览器排好交上来的，不是服务端产的 —— 所以这一页要假定
-// body_html 里可能混进能执行的东西。script-src 不给 unsafe-inline 也不给 unsafe-hashes：
-// 写在内联标签里的脚本、以及 on 开头的内联事件属性都不执行，脚本只能从本站同源取。
+// 正文由浏览器排，而排版允许源文里的原始 HTML 照原样出来（那是对齐 Astro 那条管线所
+// 必需的）—— 所以这一页要当源文里可能混进能执行的东西。script-src 不给 unsafe-inline
+// 也不给 unsafe-hashes：写在内联标签里的脚本、on 开头的内联事件属性、javascript: 伪协议
+// 链接都不执行，脚本只能从本站同源取。防线只有这一条，加上「能写的人只有我自己」。
 Astro.response.headers.set('Content-Security-Policy', "script-src 'self'; object-src 'none'; base-uri 'self'");
 
 // 手写标题组件会把字体 bundle（十几 KB）拉进来。**必须条件加载** ——
@@ -43,7 +46,8 @@ const fmt = fmtDate(updatedAt(post));
         {showWrite && <a class="u editbtn" href={`/write/${post.column}/?slug=${post.slug}`}>编辑这篇</a>}
       </div>
       <h1>{post.title}</h1>
-      <Fragment set:html={post.bodyHtml} />
+      <!-- 源文原样摆在这儿，浏览器排好之后整块换掉。样式见 global.css 的 .raw-md -->
+      <div class="raw-md" id="mdsrc">{post.bodyMd}</div>
     </article>
   </div>
 <!-- 阅读导引：左侧标尺（一行一条刻度）+ 视口正中的阅读横线 + 光球。
@@ -60,11 +64,27 @@ const fmt = fmtDate(updatedAt(post));
   </div>
 </Base>
 <script>
-  // 阅读导引抽成共用模块（src/scripts/readguide.ts）：写作页 /write/栏目/ 用的是
-  // 同一份，所以两处的标尺、红线、红球行为不会各走各的。
+  // 阅读导引抽成共用模块（src/scripts/readguide.ts）：写作台用的是同一份，所以两处的
+  // 标尺、红线、红球行为不会各走各的。它量的是正文里的标题位置，所以**必须等排版落定**
+  // 之后再启动 —— 早一步量的就是一张还没有内容的白纸。
   import { startReadguide } from '../../scripts/readguide';
 
   const prose = document.querySelector<HTMLElement>('.prose');
   const guide = document.querySelector<HTMLElement>('.readguide');
-  if (prose && guide) startReadguide(prose, guide);
+  const src = document.getElementById('mdsrc');
+
+  if (prose && guide && src) {
+    // 转义是 Astro 在 HTML 里做的，textContent 拿回来的就是库那份源文本身
+    const markdown = src.textContent ?? '';
+    void (async () => {
+      // 排版包只有文章页要，动态 import 成一个独立 chunk（768KB 原样 / 191KB brotli，
+      // 代码语言各自一片，文章里没出现的语言不下），不随导航预取发给首页和列表页
+      const { createRenderer } = await import('../../lib/render');
+      const html = await (await createRenderer()).render(markdown);
+      const holder = document.createElement('div');
+      holder.innerHTML = html;
+      src.replaceWith(...holder.childNodes);
+      startReadguide(prose, guide);
+    })();
+  }
 </script>

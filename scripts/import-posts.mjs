@@ -4,14 +4,14 @@
  *   node scripts/import-posts.mjs        只生成 SQL
  *   然后 npx wrangler d1 migrations apply blog --local / --remote
  *
- * 正文 HTML 全部由 src/lib/render.ts 排 —— 和写作页预览、线上新建的文章同一份实现。
- * 「六家综合排行」那张 11 列表先由 scripts/build-rank-table.mjs 从数据写成正文里的
- * 原始 HTML，所以它也只是普通 .md，没有构建期组件那条特例。
+ * 正文只灌 Markdown：排好的 HTML 不再进库，文章页在读者浏览器里用 src/lib/render.ts
+ * 现排 —— 和写作台同一份实现。「六家综合排行」那张 11 列表先由
+ * scripts/build-rank-table.mjs 从数据写成正文里的原始 HTML，所以它也只是普通 .md，
+ * 没有构建期组件那条特例。
  */
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { COLUMNS } from '../src/data/columns.ts';
 import { splitChunks } from '../src/lib/post-parts.ts';
-import { createRenderer } from '../src/lib/render.ts';
 
 const BLOG_DIR = 'src/content/blog';
 const OUT = 'migrations/0002_seed_posts.sql';
@@ -34,16 +34,19 @@ function parse(raw, file) {
 
 const quoted = (v) => (v === undefined || v === null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`);
 
-/** 正文一行塞不下（D1 单值上限约 100,000 字节），按片写成多条 INSERT */
-function partInserts(slug, kind, text) {
+/**
+ * 正文一行塞不下（D1 单值上限约 100,000 字节），按片写成多条 INSERT。
+ * ⚠ 这里还写着 kind 这一列，是因为种子这条跑在 0003 之前 —— 那时候那张表还是
+ *   (slug, kind, idx, body)。只灌 md 一种，0003 会把这一列整个去掉。
+ */
+function partInserts(slug, text) {
   return splitChunks(text)
     .map((body, idx) =>
-      `INSERT INTO post_parts (slug, kind, idx, body) VALUES (${quoted(slug)}, ${quoted(kind)}, ${idx}, ${quoted(body)});`
+      `INSERT INTO post_parts (slug, kind, idx, body) VALUES (${quoted(slug)}, 'md', ${idx}, ${quoted(body)});`
     )
     .join('\n');
 }
 
-const renderer = await createRenderer();
 const rows = [];
 
 for (const name of readdirSync(BLOG_DIR).sort()) {
@@ -54,9 +57,8 @@ for (const name of readdirSync(BLOG_DIR).sort()) {
     throw new Error(`${name}: 栏目 "${data.column}" 不在 src/data/columns.ts 的注册表里`);
   }
   const markdown = body.trimEnd();
-  const html = await renderer.render(markdown);
-  rows.push({ slug, data, markdown, html });
-  console.log(`${slug}\t${(html.length / 1024).toFixed(1)} KB html\t${(markdown.length / 1024).toFixed(1)} KB md`);
+  rows.push({ slug, data, markdown });
+  console.log(`${slug}\t${(markdown.length / 1024).toFixed(1)} KB md`);
 }
 
 const sql = [
@@ -64,8 +66,7 @@ const sql = [
   ...rows.flatMap((r) => [
     `-- ${r.slug}`,
     `DELETE FROM post_parts WHERE slug = ${quoted(r.slug)};`,
-    partInserts(r.slug, 'md', r.markdown),
-    partInserts(r.slug, 'html', r.html),
+    partInserts(r.slug, r.markdown),
     [
       'INSERT INTO posts (slug, column_slug, title, date, updated, cover, handwritten, depth)',
       'VALUES (',

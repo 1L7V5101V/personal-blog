@@ -1,13 +1,17 @@
 /**
  * 站上写作的后端规则：正文收不收、收下来存成什么样。
- * 排版不在这里 —— 那一步在浏览器里跑 src/lib/render.ts（原因见下面第一条警告）。
+ * 排版不在这里 —— 那一步永远在浏览器里跑 src/lib/render.ts。
  *
  * ⚠ 为什么排版不放在服务端：Workers Free 计划每个 HTTP 请求只有 10ms CPU，超了就
  *   返回 Error 1102。实测排一篇 0.2KB 的短文要 29ms，那篇 21.6KB 的长笔记要 675ms。
- *   所以线上是「浏览器排版 → 把 Markdown 和排好的 HTML 一起交上来 → 存库」，
- *   文章页只把库里的 HTML 吐出去，不在请求里排任何东西。
- * ⚠ 代价：交上来的 HTML 是客户端产的，入库前必须净洗（下面 sanitize），
- *   并且文章页要挂 script-src 'self' 的内容安全政策兜住漏网的内联处理器。
+ *   所以收下来的是 Markdown 源文，存进去也只有这一份；文章页把源文交给**读者的浏览器**
+ *   现排，写作台交给**作者的浏览器**现排 —— 两处调的是同一份代码。
+ * ⚠ 代价：能排进正文的东西由源文里写了什么决定，而源文里的原始 HTML 会照原样排出来
+ *   （`allowDangerousHtml` 是排版对齐 Astro 那条管线所必需的）。所以这里的信任前提
+ *   只有一条、而且比过去更吃重：**能写的必须是过了 Access 的你**。兜底是文章页那条
+ *   `Content-Security-Policy: script-src 'self'` —— 不给 unsafe-inline 也不给 unsafe-hashes，
+ *   所以内联脚本、on 开头的内联事件属性、javascript: 伪协议链接在读者那边都不执行。
+ *   HTML 入库前不再净洗：库里存的是源文，没有一份「排好的 HTML」可以洗了。
  */
 import { COLUMNS } from '../data/columns';
 import { partStatements, readBody } from './post-parts';
@@ -30,36 +34,6 @@ function today(): string {
 export const tooLarge = (raw: string) => raw.length > MAX_BODY;
 
 /**
- * 把交上来的 HTML 过一遍：能执行脚本的标签整个扔掉，href/src 里的伪协议抹成 #。
- * 属性名通配（on*）HTMLRewriter 的选择器写不了，那部分由文章页的 CSP 兜：
- * script-src 'self' 之下内联 on* 处理器不会执行（要执行得给 unsafe-inline，我们没给）。
- */
-export async function sanitize(html: string): Promise<string> {
-  // 伪协议：点一下就执行脚本的链接。⚠ 选择器里不能出现带冒号的属性名
-  // （[xlink:href] 会让 HTMLRewriter 的解析器报错），SVG 现在也用普通 href
-  const PSEUDO = /^\s*(javascript|data|vbscript):/i;
-  const killUrl = (name: string) => ({
-    element(el: { getAttribute: (n: string) => string | null; setAttribute: (n: string, v: string) => void }) {
-      const value = el.getAttribute(name);
-      // ⚠ 不能在遍历 attributes 的当儿改它 —— HTMLRewriter 会直接抛错，所以定点读写
-      if (value && PSEUDO.test(value)) el.setAttribute(name, '#');
-    },
-  });
-  const res = new HTMLRewriter()
-    .on('script, style, iframe, object, embed, link, meta, base, form', {
-      element(el) {
-        el.remove();
-      },
-    })
-    .on('[href]', killUrl('href'))
-    .on('[src]', killUrl('src'))
-    .on('[formaction]', killUrl('formaction'))
-    .on('[action]', killUrl('action'))
-    .transform(new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } }));
-  return await res.text();
-}
-
-/**
  * 存一篇文章。mode=new 时 slug 撞上已有文章返回 409；mode=edit 时必须已经存在。
  * 更新只动栏目、标题和正文，发布时间 date 保持原样，并把 updated 写成今天。
  */
@@ -70,7 +44,6 @@ export async function savePost(
     title?: unknown;
     slug?: unknown;
     markdown?: unknown;
-    html?: unknown;
   },
   mode: 'new' | 'edit'
 ): Promise<SaveResult> {
@@ -78,7 +51,6 @@ export async function savePost(
   const title = String(payload.title ?? '').trim();
   const slug = String(payload.slug ?? '').trim();
   const markdown = String(payload.markdown ?? '').replace(/\r\n/g, '\n').trimEnd();
-  const html = String(payload.html ?? '');
 
   if (!COLUMNS.some((c) => c.slug === column)) {
     return { status: 400, data: { error: '栏目不在注册表里（src/data/columns.ts）' } };
@@ -86,7 +58,6 @@ export async function savePost(
   if (!title) return { status: 400, data: { error: '标题是空的' } };
   if (!SLUG_RE.test(slug)) return { status: 400, data: { error: '地址只能用英文小写、数字和连字符' } };
   if (!markdown) return { status: 400, data: { error: '正文是空的' } };
-  if (!html) return { status: 400, data: { error: '没带上排好的正文' } };
 
   const found = await db
     .prepare('SELECT slug, date, cover, handwritten, depth FROM posts WHERE slug = ?')
@@ -101,7 +72,6 @@ export async function savePost(
 
   const date = existing?.date ?? today();
   const updated = mode === 'edit' ? today() : null;
-  const clean = await sanitize(html);
 
   const meta = db.prepare(
     `INSERT INTO posts (slug, column_slug, title, date, updated, cover, handwritten, depth, saved_at)
@@ -112,7 +82,7 @@ export async function savePost(
   );
   // 正文的片和元数据的更新在一个事务里：不能出现标题新、正文旧
   await db.batch([
-    ...partStatements(db, slug, markdown, clean),
+    ...partStatements(db, slug, markdown),
     meta.bind(
       slug,
       column,
@@ -135,5 +105,5 @@ export async function loadPost(db: Db, slug: string): Promise<SaveResult> {
     .bind(slug)
     .first();
   if (!row) return { status: 404, data: { error: `还没有 ${slug} 这篇文章` } };
-  return { status: 200, data: { ...(row as Record<string, unknown>), body_md: await readBody(db, slug, 'md') } };
+  return { status: 200, data: { ...(row as Record<string, unknown>), body_md: await readBody(db, slug) } };
 }

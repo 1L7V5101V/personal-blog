@@ -1,10 +1,9 @@
 /**
  * 文章的取数与排序。线上唯一的出处是 D1 里的 posts 表，列名就是原来 frontmatter 的字段名。
- * 列表页只要目录信息，所以分成两个查询：读列表不带 body_html（那篇长文的正文有 700KB），
- * 读单篇才带。
+ * 列表页只要目录信息，所以分成两个查询：读列表不取正文，读单篇才取。
  */
 import { columnOf } from '../data/columns';
-import { readBody, type PartKind } from './post-parts';
+import { readBody } from './post-parts';
 
 /** D1 里除去正文的那部分（列表、首页卡片、栏目页用这个就够） */
 export type PostMeta = {
@@ -18,10 +17,13 @@ export type PostMeta = {
   depth: string | null;
 };
 
-/** 正文按需求取：列表页不取，文章页只取 HTML，写作页只取 Markdown */
+/**
+ * 一篇文章：正文只有 Markdown 这一份。
+ * 谁要把源码文排出来，谁就跑 src/lib/render.ts（文章页在读者浏览器里跑，写作台在作者
+ * 浏览器里跑）—— 库里不再存排好的 HTML，也就没有「源文改了、那份 HTML 还是旧的」这件事。
+ */
 export type Post = PostMeta & {
   bodyMd: string;
-  bodyHtml: string;
 };
 
 /** 用到的那部分 D1 API（不想为了类型去装 @cloudflare/workers-types） */
@@ -52,7 +54,6 @@ const toPost = (r: Record<string, string | null>): Post => ({
   handwritten: r.handwritten ?? null,
   depth: r.depth ?? null,
   bodyMd: (r.body_md as string) ?? '',
-  bodyHtml: (r.body_html as string) ?? '',
 });
 
 /**
@@ -74,19 +75,13 @@ export const allPosts = async (db: Db): Promise<PostMeta[]> => {
 };
 
 /**
- * 单篇。`need` 决定取哪份正文（正文是分片存的，取一次要按 idx 拼回来）。
- * 库里没有这篇就返回 null，页面自己处理。
+ * 单篇：正文是分片存的，取一次要按 idx 拼回来。库里没有这篇就返回 null，页面自己处理。
  */
-export const postBySlug = async (
-  db: Db,
-  slug: string,
-  need: PartKind | 'both' = 'html'
-): Promise<Post | null> => {
+export const postBySlug = async (db: Db, slug: string): Promise<Post | null> => {
   const row = await db.prepare(`SELECT ${META_COLUMNS} FROM posts WHERE slug = ?`).bind(slug).first();
   if (!row) return null;
   const post = toPost(row);
-  if (need === 'html' || need === 'both') post.bodyHtml = await readBody(db, slug, 'html');
-  if (need === 'md' || need === 'both') post.bodyMd = await readBody(db, slug, 'md');
+  post.bodyMd = await readBody(db, slug);
   return post;
 };
 

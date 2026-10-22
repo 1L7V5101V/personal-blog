@@ -41,14 +41,11 @@ function query(sql) {
 const rows = query(
   'SELECT slug, column_slug, title, date, updated, cover, handwritten, depth FROM posts ORDER BY slug'
 );
-const parts = query('SELECT slug, kind, idx, body FROM post_parts ORDER BY slug, kind, idx');
+const parts = query('SELECT slug, idx, body FROM post_parts ORDER BY slug, idx');
 if (rows.length === 0) throw new Error('库里一篇文章都没有，先跑 migrations');
 
 const body = new Map();
-for (const p of parts) {
-  const key = `${p.slug}\u0000${p.kind}`;
-  body.set(key, (body.get(key) ?? '') + p.body);
-}
+for (const p of parts) body.set(p.slug, (body.get(p.slug) ?? '') + p.body);
 
 const line = (k, v) => (v ? `${k}: ${v}` : null);
 const written = [];
@@ -66,7 +63,7 @@ for (const r of rows) {
     '---',
     '',
   ].filter((l) => l !== null);
-  const md = fm.join('\n') + (body.get(`${r.slug}\u0000md`) ?? '').trimEnd() + '\n';
+  const md = fm.join('\n') + (body.get(r.slug) ?? '').trimEnd() + '\n';
   const file = `${DIR}/${r.slug}.md`;
   if (existsSync(file) && readFileSync(file, 'utf8') === md) same.push(r.slug);
   else {

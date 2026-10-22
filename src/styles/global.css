@@ -838,6 +838,14 @@ footer.site {
   gap: 1rem;
   margin-bottom: 2.5rem;
 }
+/* 库里只存源文，正文由读者的浏览器现排（见 src/pages/blog/[slug].astro 底部）。
+   这一节是没有 JavaScript 时的兜底：保住换行、能读完。排好之后这一整块被换掉，
+   class 不留在纸上。 */
+.prose .raw-md {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  color: var(--ink-2);
+}
 .prose h1 { font-size: clamp(2.28rem, 4.8vw, 3.36rem); line-height: 1.25; margin-bottom: 0.5em; color: var(--ink); }
 .prose h2 { font-size: 1.68rem; margin-top: 2.4em; color: var(--ink); }
 .prose h3 { font-size: 1.32rem; margin-top: 2em; color: var(--ink); }

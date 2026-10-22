@@ -21,7 +21,7 @@ async function allowed(ctx: { request: Request }): Promise<boolean> {
   return canWrite(ctx.request, env);
 }
 
-/** POST：存文章。body = { mode, column, title, slug, markdown, html } */
+/** POST：存文章。body = { mode, column, title, slug, markdown } */
 export const POST: APIRoute = async (ctx) => {
   if (!(await allowed(ctx))) return json(403, { error: '没过 Access，不能写' });
 
