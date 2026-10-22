@@ -1,0 +1,51 @@
+// personal-blog — 浏览器运行时的「隐式层级」：真实依赖挂在 window 全局上，import 图里看不见
+// 用 system-modeler 的证据画；每条边都指回文件:行。渲染：Graphviz（dot -Tsvg runtime-bus.dot -o runtime-bus.svg）
+digraph runtime_bus {
+  rankdir=TB;
+  label="隐式运行时契约：window.__fx / __lenis / __ecgStrip / __pt + sessionStorage('pt')\n这些不是 import 关系，所以 C4 组件图看不到，但它决定了页面能不能动。";
+  labelloc=t; fontsize=13;
+  node [shape=box, style=rounded, fontsize=11];
+  edge [fontsize=10];
+
+  // ── 总线本体 ──
+  subgraph cluster_bus {
+    label="契约（无模块，只有全局名）"; style=dashed; color=gray;
+    fx       [label="window.__fx[]\n回调数组"];
+    lenis    [label="window.__lenis\n滚动控制器"];
+    ecgstrip [label="window.__ecgStrip\n{ build, move }"];
+    ptflag   [label="window.__pt\n{ skipIntro }"];
+    evtback  [label="Event 'pt-back'"];
+    sess     [label="sessionStorage['pt']\n{url,src,pt,x/y/w/h,r,sy}", shape=cylinder];
+  }
+
+  // ── 驱动者 ──
+  base      [label="Base.astro:85-92\n唯一 rAF 驱动 + 异常捕获 __fxErrs"];
+  ecgcomp   [label="EcgProgress.astro:92-93,149\n注册 __fx、建 __ecgStrip"];
+  indexpage [label="index.astro:288/380/682\njourney + tilt 各自 push __fx"];
+  slugpage  [label="blog/[slug].astro:367\n阅读导引 push(update)"];
+  aboutpage [label="about.astro:48-49\n时间线描线 push __fx"];
+  ptscript  [label="scripts/page-transition.ts\n只读 __lenis，不碰 __fx"];
+  fluidjs   [label="scripts/fluid.js\nindex.astro:142 动态 import"];
+
+  base -> fx       [label="每帧 for..of 调用"];
+  ecgcomp -> fx    [label="push"];
+  ecgcomp -> ecgstrip [label="写入"];
+  indexpage -> fx  [label="push ×3"];
+  slugpage -> fx   [label="push"];
+  aboutpage -> fx  [label="push"];
+
+  base -> lenis    [label="赋值 / reduced-motion 时置 null (:66,:71)"];
+  indexpage -> lenis [label="scrollTo 必须走它，直接 window.scrollTo 会被 Lenis 抢回 (:519)"];
+  ptscript -> lenis [label="__lenis.scrollTo(y,{immediate:true}) (:61,:77)"];
+
+  indexpage -> ecgstrip [label="每帧现查，未建成则补 build()（脚本先后顺序不保证）(:493-497,:711)"];
+  ptscript -> sess      [label="写/删记录"];
+  ptscript -> evtback   [label="dispatchEvent (:248)"];
+  indexpage -> evtback  [label="addEventListener → stopAuto (:527)"];
+  indexpage -> ptflag   [label="读 skipIntro，压住开场自动播放"];
+  indexpage -> fluidjs  [label="dynamic import"];
+
+  // ── 已知脆弱点：顺序不保证的两处 ──
+  ecgcomp -> indexpage [label="组件脚本 vs 页面脚本谁先跑不保证\n→ 靠每帧现查兜底", style=dashed, color=red];
+  ptflag -> indexpage  [label="模块脚本 vs 页面脚本先后不保证\n→ 双向保险（读 __pt + 挂事件）", style=dashed, color=red];
+}
