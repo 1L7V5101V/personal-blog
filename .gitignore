@@ -33,3 +33,6 @@ AGENTS.md
 
 # Access 的 TEAM_DOMAIN / AUD 走 secret，本地跑 dev 用的那份不入库
 .dev.vars
+
+# ZCode 自己的忽略配置（上半段是从本文件同步过去的），本地工具配置、不入库
+.zcodeignore
