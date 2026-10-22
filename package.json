@@ -36,6 +36,7 @@
     "remark-smartypants": "^3.0.3",
     "shiki": "^3.23.0",
     "tegaki": "^1.0.2",
+    "three": "^0.160.0",
     "unified": "^11.0.5",
     "unist-util-remove-position": "^5.0.0",
     "unist-util-visit": "^5.1.0",
