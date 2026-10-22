@@ -287,7 +287,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .hline path:nth-child(3) { stroke: var(--accent); stroke-width: 10; }
 
 /* 悬停：卡片内容轻微放大 */
-.slot .hero-card, .slot .hcard, .slot .poster, .slot .listpanel-card {
+.slot .hero-card, .slot .hcard, .slot .poster, .slot .listpanel-card, .slot .crtcard {
   /* 卡片也要成层：弯牌时本体就是切片里的「中条」，它和其余 10 条必须处在同一种渲染路径上，
      否则中条两边会跟克隆片看起来不一样（曾被读成“被切片”）。
      过渡列表里只有 transform：卡上不允许有 box-shadow（投影归 .slot::before），
@@ -300,7 +300,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
    .deck-unfolded 类实现的，而那个类只在 journey 的 rAF 块里加，窄屏和减动效两个分支
    都不跑那段代码，所以那些设备上「黏住的放大」没有任何东西压得住。 */
 @media (hover: hover) and (pointer: fine) {
-  .slot:hover .hero-card, .slot:hover .hcard, .slot:hover .poster, .slot:hover .listpanel-card {
+  .slot:hover .hero-card, .slot:hover .hcard, .slot:hover .poster, .slot:hover .listpanel-card, .slot:hover .crtcard {
     transform: scale(1.025);
   }
 }
@@ -313,6 +313,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .journey.deck-unfolded .slot:hover .hcard,
 .journey.deck-unfolded .slot:hover .poster,
 .journey.deck-unfolded .slot:hover .listpanel-card,
+.journey.deck-unfolded .slot:hover .crtcard,
 .journey.deck-unfolded .slot:hover .poster .pdot {
   transform: none;
 }
@@ -398,7 +399,7 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
      弯牌/点开过渡期间 JS 会把它放平回 none。 */
   transform: var(--tilt, none);
 }
-.hero-card, .hcard .imgbox, .poster, .listpanel-card {
+.hero-card, .hcard .imgbox, .poster, .listpanel-card, .crtcard {
   border-radius: var(--card-r);
   corner-shape: superellipse(2);   /* 投影在 .slot 上（见上），卡片自己不带 */
 }
@@ -522,7 +523,8 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .slot.is-bent > .hero-card,
 .slot.is-bent > .hcard,
 .slot.is-bent > .poster,
-.slot.is-bent > .listpanel-card {
+.slot.is-bent > .listpanel-card,
+.slot.is-bent > .crtcard {
   transition: none !important;
 }
 
@@ -705,6 +707,54 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+/* ---------- CRT 卡：轨道里唯一那块会动的玻璃 ----------
+   内容 = src/scripts/crt.ts 的两趟着色器（图案 → 低分辨率信号，显示器外壳 → 卡的真实像素）。
+   卡面上不写字：五个图案的亮度从「整屏纯白」（threesome / plaid）跨到「整屏近黑」
+   （sunlight_revealed），巨型字无论走黑漆还是白漆都会在一半的图案上消失。
+   它也不链去任何地方 —— 这张卡就是那件东西本身，像牌堆里唯一一台真的机器。
+
+   下面这块 background-image 是那张「没有信号的屏」，三种场合要靠它兜住：
+   ① 弯牌切片期间（cloneNode 带不过去位图，画布整个藏掉，见 .is-bent）；
+   ② 移动端 / reduced-motion（着色器根本不启动）；
+   ③ 没有 WebGL2 / 编译失败。
+   ①尤其要紧：本体和 11 条克隆必须显示同一样东西，否则接缝处一半是屏纹一半是黑的。
+   扫描线条数按 3px 一条走，和着色器里那条同一间距（repeating-linear-gradient 一次画完，
+   不为一排等距线建 DOM）。 */
+.crtslot { width: min(75vw, 76rem); }
+.crtcard {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  /* 底色由 background-color 给，几何走 background-image —— 简写会清空 image（见文件里那条硬规则） */
+  background-color: var(--ink-black);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--bg) 85%, transparent) 0 1px,
+      transparent 1px 3px
+    ),
+    /* 待机那团红：真实显像管熄了也有残余辉光，顺带把这块黑和画布的黑分开 */
+    radial-gradient(72% 54% at 50% 44%, color-mix(in srgb, var(--accent) 19%, transparent), transparent 72%),
+    /* 管口暗角：四角压向画布黑，读出「玻璃是凸的」 */
+    radial-gradient(120% 108% at 50% 50%, transparent 46%, color-mix(in srgb, var(--bg) 82%, transparent));
+}
+/* 着色器就叠在这张静态屏上：首帧画成才打开（在那之前画布是一片黑，会盖掉底下的兜底） */
+.crtcard .crtscr {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+}
+/* 切片期间画布让位，露出卡片自己的静态屏纹（同 .fdpt 那条道理） */
+.slot.is-bent .crtcard .crtscr {
+  display: none;
 }
 
 /* 宣言：直接写在画布上 */
@@ -1589,7 +1639,7 @@ html.pt-arrive .readguide {
   /* 手机上不露滚动条，靠 swipe；桌面减动效那条要留着可见的滚动条当线索 */
   .stage { scrollbar-width: none; }
   .stage::-webkit-scrollbar { display: none; }
-  .slot, .heroeslot, .listpanel, .manifesto, .endpanel { width: 88vw; min-width: 88vw; }
+  .slot, .heroeslot, .listpanel, .crtslot, .manifesto, .endpanel { width: 88vw; min-width: 88vw; }
   /* 小屏卡片窄，色块圆会压到标题上。
      ⚠ 用 `translate` / `scale` 独立属性，**不要用 `transform`**：
      这些 span 的 width / right / top / transform 都是行内样式，内联的 transform
@@ -1613,6 +1663,7 @@ html.pt-arrive .readguide {
   .slot:hover .hcard,
   .slot:hover .poster,
   .slot:hover .listpanel-card,
+  .slot:hover .crtcard,
   .slot:hover .poster .pdot { transform: none !important; }
   /* 下划线展开和散焦→对焦改的是几何与模糊量，抹平到一帧：状态仍然看得见
      （线在、图清晰），只是不再扫过来。 */

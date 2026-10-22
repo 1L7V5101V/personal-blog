@@ -22,8 +22,13 @@ export const prerender = false;
 
 // 最后一张卡：全部文章，按各篇的最后更新时间倒序
 const posts = await allPosts(env.DB);
+// 暂时不上首页的栏目卡。只是卡面不下发 —— 栏目本身、里面的文章、/columns/ 那一行、
+// 写作台入口全都在（读者从栏目页照样进得去）。Test 让出来的那个位置现在归 CRT 动画卡。
+// 要收回来：把 slug 从这张名单里删掉即可 —— 它有带封面的文章，所以会自动变回图片卡
+// （照片 + 深度图视差 + 悬停散焦那条分支一直原样留着，没为这次禁用删过任何东西）。
+const HOME_OFF = new Set(['test']);
 let gi = 0;   // 海报卡的几何轮转指针（图片卡不参与轮转）
-const homeCols = COLUMNS.map((c) => {
+const homeCols = COLUMNS.filter((c) => !HOME_OFF.has(c.slug)).map((c) => {
   // 卡面的照片 = 这一栏里最新一篇带 cover 的文章的封面（深度图跟着一起带过来）。
   // 一篇带封面的都没有 —— 退回纯字的海报卡。
   const art = postsIn(posts, c.slug).find((p) => p.cover);
@@ -82,7 +87,16 @@ const homeCols = COLUMNS.map((c) => {
           </a>
         </section>
 
-        <!-- 2 · 栏目卡（一栏一张，卡面就是栏目名）。这一栏有带封面的文章 → 图片卡
+        <!-- 2 · CRT 动画卡：一台真的在放信号的显示器，顶在 Test 那张图片卡让出来的位置上
+             （着色器 src/scripts/crt.ts，静止兜底见 global.css 的 .crtcard）。
+             它不是栏目卡：不写字、不链去任何地方，所以也不参与栏目卡的几何轮转。 -->
+        <section class="slot crtslot">
+          <div class="crtcard">
+            <canvas class="crtscr" aria-hidden="true"></canvas>
+          </div>
+        </section>
+
+        <!-- 3 · 栏目卡（一栏一张，卡面就是栏目名）。这一栏有带封面的文章 → 图片卡
              （悬停散焦→对焦 + 深度图视差）；没有 → 纯字海报卡。两种卡的字号走同一套规则。 -->
         {homeCols.map((c) => (
           <div class="slot pslot">
@@ -118,7 +132,7 @@ const homeCols = COLUMNS.map((c) => {
           </div>
         ))}
 
-        <!-- 3 · 全部文章：白卡，按最后更新时间倒序 -->
+        <!-- 4 · 全部文章：白卡，按最后更新时间倒序 -->
         <section class="slot listpanel">
           <div class="listpanel-card geo-frame">
             <div class="list">
@@ -132,14 +146,14 @@ const homeCols = COLUMNS.map((c) => {
           </div>
         </section>
 
-        <!-- 4 · 宣言：直接写在画布上 -->
+        <!-- 5 · 宣言：直接写在画布上 -->
         <section class="panel manifesto">
           <p data-io style="--i:0">把字写清楚。</p>
           <p data-io style="--i:1">把代码写简单。</p>
           <p data-io style="--i:2">把东西做久。</p>
         </section>
 
-        <!-- 5 · 到头了 -->
+        <!-- 6 · 到头了 -->
         <section class="panel endpanel">
           <p class="big" data-io style="--i:0">到头了。</p>
         </section>
@@ -149,6 +163,9 @@ const homeCols = COLUMNS.map((c) => {
 </Base>
 
 <script>
+  // CRT 卡那台显示器（模块自跑：图案着色器 + 外壳着色器，回调挂进 __fx）
+  import '../../scripts/crt';
+
   const journey = document.querySelector<HTMLElement>('.journey');
   const track = document.querySelector<HTMLElement>('.track');
   const curvePaths = [...document.querySelectorAll<SVGPathElement>('.hline path')];
@@ -612,7 +629,9 @@ void main(){
         c.style.display = 'none';
         // 视差画布不跟着克隆：<canvas> 的位图不会被 cloneNode 复制，留着就是一堆永远空白、
         // 还可能被 querySelector('.fdpt') 误选中的空壳（切片期间本来也是 <img> 顶班）。
+        // CRT 卡的 .crtscr 同理：切片期间它被 CSS 藏起来，露出卡片自己的静态屏纹。
         c.querySelector('.fdpt')?.remove();
+        c.querySelector('.crtscr')?.remove();
         el.appendChild(c);
         list.push(c);
       }
