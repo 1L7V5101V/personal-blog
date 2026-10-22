@@ -10,8 +10,18 @@ interface Props {
   /** 当前页的路径。about.astro 和 blog/[slug].astro 早就在传这个属性了，
       但 Props 里没声明、也没人读 —— 「你在哪一段」这个钩子等于设计了却没接线。 */
   path?: string;
+  /** 挂在 <html> 上的类：给「整页换一套底色」这种页面级开关用（见 /blog/ 的 whitepage）。
+      必须在 html 上而不是 body —— html 才是读 --bg 的那个元素，
+      挂在 body 上时 overscroll 那一条和 .topveil 拿到的还是黑场。 */
+  htmlClass?: string;
 }
-const { title = 'il7510n', description = 'il7510n 的个人博客', ecgMode, path = Astro.url.pathname } = Astro.props;
+const {
+  title = 'il7510n',
+  description = 'il7510n 的个人博客',
+  ecgMode,
+  path = Astro.url.pathname,
+  htmlClass,
+} = Astro.props;
 const EMAIL = 'hi@il7510n.dpdns.org';
 const NAV = [
   { href: '/blog/', label: '文章' },
@@ -20,7 +30,7 @@ const NAV = [
 ];
 ---
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class={htmlClass}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -43,7 +53,8 @@ const NAV = [
     <nav class="topnav">
       {/* logo 也走 .u：顶栏所有链接的反馈都是同一套（变白 + 下划线展开），
           它以前没带这个类，于是「回首页」这个链接什么都不响应 */}
-      <a class="logo u" href="/">il7510n</a>
+      {/* 前门是 /blog/：根路径只剩一条跳转，logo 直接指过去，省一次往返 */}
+      <a class="logo u" href="/blog/">il7510n</a>
       <div class="links">
         {NAV.map((n) => (
           <a

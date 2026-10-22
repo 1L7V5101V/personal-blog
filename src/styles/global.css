@@ -756,6 +756,261 @@ body.loaded [data-reveal] { opacity: 1; transform: none; }
 .listpanel-card .row .m { color: var(--card-fg-3); }
 .listpanel-card .row:hover .t { color: var(--ink-red); }
 
+/* ---------- /blog/ 列表页：整页真白 + 封面式排版 ----------
+   照 artmilitonian.com 首页（它的第 1 页）抄的。数值是从它渲染后的 DOM 上量的
+   —— 整页其实是**一个文本流**，不是散落的一堆绝对定位块：
+     巨型字条目   60px / 行高 61px（= 1.017）/ 字距 −1.5px（= −0.025em）/ 字重 500
+     小标签「index:」34px / 35px / 字重 400
+     顶部四栏微字 8px / 9px / 字距 +0.5px
+     条目下面那条粗线 6px = 0.1em（background 画的，见下）
+     左边缘在视口的 16%，index 那一列再往里缩 84px = 5.56%
+   它的设计稿宽 1512（desktopWidth），所以这些 px 一律换算成 vw，窄屏才跟着缩。
+   这一页不参与「白纸只给文章详情页」那条约定：整页真白是这一页自己的决定。 */
+html.whitepage {
+  /* 参考站是纯白，所以这里不走 --white（那是采样来的冷白，做背景偏蓝）。
+     字色不另起一套：直接换成卡上那三个已经采过样的冷灰黑。 */
+  --bg: #ffffff;
+  --fg: var(--ink-black);
+  --fg-2: var(--card-fg-2);
+  --fg-3: var(--card-fg-3);
+  --hairline: var(--card-line);
+}
+/* 那团跟指针走的红光只照黑场。这一页没有黑场，留着就是白纸上洇开一圈粉渍
+   （同「白面上加不出光」那条）—— 整层摘掉，不是调透明度。 */
+html.whitepage .mouselight { display: none; }
+
+/* 参考站的展示字是 **webfont 的 Helvetica Neue Medium**（它载入了 custom_87914 的 400 和 500 两档）。
+   全站那条字体栈把 "Helvetica Neue" 写在最前面，可 Windows 上根本没装这个字体，于是落到 Arial ——
+   而 Arial 没有 Medium，`font-weight: 500` 被浏览器拿 400 顶替（实测：同一串字在 Arial 下
+   400 和 500 量出来都是 296.81px，而参考站的 HN Medium 是 313.38px）。
+   差的这 5.3% 宽度和一档字重就是「字体、字体粗细都不一样」的来源。
+   所以这一页自带一个有真 500 的替身：Archivo（OFL，Helvetica 系 grotesque，
+   它的 400 和 HN 的 400 几乎等宽：302.11 vs 302.34）。装了 macOS 的人仍然命中真 Helvetica Neue。 */
+@font-face {
+  font-family: Archivo;
+  font-style: normal;
+  /* 100–900 一条区间声明，而不是拆成 400 / 500 两条：这个文件是可变字体
+     （Google 对 400 和 500 返回的是同一个 url），拆成两条固定值就只能取到整档，
+     而这一页要的 540 在中间。 */
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(/fonts/archivo-latin.woff2) format('woff2');
+}
+
+/* 参考站的缩放机制：设计稿宽 1512，整页按 视口/1512 缩放，但只放大到视口 2000 为止
+   （opts.scalewidth = 2000）。所以每个字号都有两条边：下限保可读，上限 = 原 px × 1.3227。
+   我上一版把上限写死成 60px，于是在 2560 宽的屏上参考站是 79px 而这里还是 60px —— 整页偏小。 */
+.blogpage {
+  --display: clamp(1.5rem, 3.97vw, 4.96rem);    /* 60px */
+  --label: clamp(0.95rem, 2.25vw, 2.81rem);     /* 34px */
+  /* 参考站写 500，那是 Helvetica Neue 的 Medium。Archivo 的 500 比它轻 4.5%
+     （同一串字在 60px 下实心像素 2406 vs 2520），540 才对得上（2544）。
+     这一页的展示字统一走这个数。 */
+  --w-display: 540;
+  /* 参考站的标签是 400，同一条偏移量推上来 */
+  --w-label: 440;
+  /* 参考站这条是 8px。那是拉丁全大写；这里要排中文，抬到 10.5–12px 才读得动。 */
+  --micro: clamp(0.66rem, 0.53vw, 0.75rem);
+  --side: clamp(1.25rem, 11.8vw, 14.75rem);     /* 文本块左缘 = 178.5px */
+  --indent: clamp(1.25rem, 5.56vw, 6.94rem);    /* index 那一列再缩 84px */
+  --gap-lead: clamp(1.5rem, 4.63vw, 6.13rem);   /* 巨型字段落 → index: 之间 70px */
+  --gap-index: clamp(2.5rem, 8.67vw, 11.47rem); /* index 列 → links: 之间 132px */
+  position: relative;
+  /* 参考站的画布只有 2000 宽（opts.scalewidth），视口再宽也只是把这块居中摆大，
+   内容不会跟着摊开。上一版我只给字号封了顶、没给宽度封顶，于是在 2850 宽的屏上
+   正文一行拉到 2380px，而它只有 1540px —— 这就是「内容宽度太宽」。 */
+  width: 100%;
+  max-width: 2000px;
+  margin-inline: auto;
+  /* 顶栏 + ECG 占掉顶部那一条；下限按窄屏量（≤420px 时顶栏那排链接会折成两三行） */
+  padding-top: clamp(8.5rem, 14vh, 11rem);
+  font-family: "Helvetica Neue", Archivo, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 地图底纹：参考站原图（纯黑线 + 透明底，3000×4558，比例正好是它那个控件的 1500/2279）。
+   位置按它画布（1512 宽）的百分比换算：left −239 = −15.8%、w 1500 = 99.2%、top −132 = −8.7%。
+   top 用百分比 margin 而不是百分比 top —— 百分比 top 是按含块「高度」算的，
+   而这一页下面还挂着文章列表，高度随文章数变；margin-top 的百分比按「宽度」算，
+   才真的跟着画布宽走。 */
+.blogmap {
+  position: absolute;
+  left: -15.8%;
+  top: 0;
+  margin-top: -8.7%;
+  width: 99.2%;
+  height: auto;
+  z-index: 0;
+  pointer-events: none;
+  /* 这张图有底边。参考站的页只有 1562 高，图 2279 高，底边落在折缝以下看不见；
+     这一页下面还挂着文章列表，图的下缘会在列表中间切出一条硬缝 —— 所以给它自己
+     加一条往下渐隐的 mask。 */
+  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 96%);
+  mask-image: linear-gradient(to bottom, #000 62%, transparent 96%);
+}
+
+/* 顶部四栏微字带。它自己贴左边缘（不吃 --side），因为参考站这一条是通栏平分的。 */
+.blogstrip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  padding-inline: 1.5rem;
+  margin-bottom: clamp(2rem, 6vh, 4.5rem);
+}
+.blogstrip p {
+  margin: 0;
+  font-size: var(--micro);
+  line-height: 1.15;
+  letter-spacing: 0.0625em;
+  font-weight: 500;
+}
+/* 参考站这四栏是四等分、每栏都往左贴（第四栏「BASED IN HELSINKI…」并不去够右边缘），
+   所以这里不做右对齐。 */
+@media (max-width: 768px) {
+  .blogstrip { grid-template-columns: repeat(2, 1fr); }
+}
+
+.blogcover {
+  position: relative;
+  z-index: 1;
+  padding-inline: var(--side);
+  /* 这一档 font-size 是给 .blogphoto 那些 em 当尺子用的（人像位的高宽都按巨型字走）。
+     块里每个元素自己都有 font-size，所以这一句不会改到字。 */
+  font-size: var(--display);
+}
+/* 中间那张竖幅人像位：压在字底下。参考站它是文本流之外的一个 picture 控件
+   （z 302，文本 304 在它上面），所以这里也绝对定位、不参与排版。
+   它要的是「一条从第二行字垂到 index 底下」的竖幅，所以宽高都按巨型字的 em 定。 */
+.blogphoto {
+  position: absolute;
+  left: 43.5%;
+  top: 1.63em;
+  width: 17.06%;
+  height: 9.5em;
+  z-index: -1;
+  pointer-events: none;
+  /* 参考站那张是 1-bit 抖动印出来的浅灰人像。这里没法真做半色调，
+     先把曝光和反差推到「浅灰、颗粒」那一边，别让它读成一块黑斑。 */
+  filter: grayscale(1) brightness(1.45) contrast(1.1);
+  opacity: 0.85;
+}
+.blogphoto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 窄屏上这条竖幅会正好压在 index 那一列字上（它按 42% 定位，窄屏时 index 的
+   右缘就快到 42% 了）。参考站的手机版本来是另一套构图，这里直接不摆这张图。 */
+@media (max-width: 900px) {
+  .blogphoto { display: none; }
+}
+
+/* 竖向节奏：两条空隙各归它前面那个块管（参考站的标签和它下面那行字是紧贴的，
+   34px 的标签行框高 35px，下一行就落在 +34 处，所以标签自己不留 margin）。 */
+.blogcover__lead {
+  font-size: var(--display);
+  font-weight: var(--w-display);
+  line-height: 1.017;
+  letter-spacing: -0.025em;
+  margin: 0 0 var(--gap-lead);
+}
+.blogcover__label {
+  font-size: var(--label);
+  font-weight: var(--w-label);
+  line-height: 1.03;
+  letter-spacing: -0.044em;
+  margin: 0;
+}
+/* index 那一列：一行一个，行高就是字号的 1.017 倍 —— 参考站那五条挤在一起的样子就是这么来的
+   （实测相邻两行的间距 = 58px，字号 57.1px，@1440 视口） */
+.blogcover__index {
+  display: block;
+  padding-left: var(--indent);
+  margin-bottom: var(--gap-index);
+  font-size: var(--display);
+  font-weight: var(--w-display);
+  letter-spacing: -0.025em;
+  line-height: 1.017;
+}
+.blogcover__index a { display: block; width: fit-content; }
+.blogcover__links {
+  font-size: var(--display);
+  font-weight: var(--w-display);
+  line-height: 1.017;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+/* 粗下划线。参考站画的是 background: linear-gradient(纯色) 0 100% / 1px 6px repeat-x
+   —— 它的条目全是单行，所以那样够用；这里的标题会折行，而 background-position
+   按整个 inline 的包围盒算，折行后只有一条线上有杠（踩过）。改走 text-decoration
+   就每一行都出杠，thickness 用 em，线跟着字号一起长。
+   颜色取 currentColor：悬停转红时线跟着一起红，而且不消失（这条是本页定的）。 */
+/* 悬停那圈微微的黑发光。参考站把它写死在自己的 DOM 上：
+   data-shadow-blur="4" / data-shadow-color="00000064"（= 39% 黑）/ data-shadow-duration="0.1"
+   / data-shadow-interactions="fade-hover"，静止态是 0 0 4px 全透明白。
+   模糊半径按 em 走（4 ÷ 60 = 0.07em），所以窄屏字号缩了它跟着缩，不会糊成一团。
+   时长没跟参考站的 0.1s：全站悬停反馈只有 0.24s 这一个数（见上面那条「动效的数只有一套出处」），
+   这里再开一个 0.1s 就变成同一页两套时长。 */
+.blogcover a {
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.035em;
+  text-decoration-skip-ink: none;
+  text-shadow: 0 0 0.07em transparent;
+  transition:
+    color 0.24s var(--ease-out),
+    text-shadow 0.24s var(--ease-out);
+}
+.blogcover a:hover,
+.blogcover a:focus-visible {
+  color: var(--accent);
+  text-shadow: 0 0 0.07em color-mix(in srgb, var(--fg) 39%, transparent);
+}
+
+/* ---------- 封面底下接原有的文章列表 ---------- */
+.blogposts { position: relative; z-index: 1; padding-inline: var(--side); margin-top: clamp(4rem, 14vh, 10rem); }
+.blogposts__label {
+  font-size: var(--label);
+  font-weight: 400;
+  letter-spacing: -0.044em;
+  margin: 0 0 clamp(1.5rem, 4vh, 3rem);
+}
+.bloglist { display: block; }
+.bloglist .row {
+  /* 全局那条 .row 是「一行字 + 右端一个日期」的一条发丝线行，这一页整个不走那套 */
+  display: block;
+  padding: 0;
+  border-bottom: 0;
+  margin-bottom: clamp(1.5rem, 3vw, 3rem);
+}
+.bloglist .row .t {
+  font-size: var(--display);
+  font-weight: var(--w-display);
+  /* 行高比封面那段松：中文长标题会折行，而 0.1em 的粗线画在基线下面，
+     走 1.017 的话上一行那条线正好压在下一行的字头上（实测过）。 */
+  line-height: 1.16;
+  letter-spacing: -0.025em;
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.035em;
+  text-decoration-skip-ink: none;
+  /* 这一行和上面封面那一列是同一类东西（巨型字 + 粗下划线 + 可点），
+     所以悬停反馈必须一模一样，否则同一页上两种读法。
+     这里不设 color —— 设了就盖掉全局那条 .row:hover .t 的变红。 */
+  text-shadow: 0 0 0.07em transparent;
+  transition:
+    color 0.24s var(--ease-out),
+    text-shadow 0.24s var(--ease-out);
+}
+.bloglist .row:hover .t,
+.bloglist .row:focus-visible .t {
+  text-shadow: 0 0 0.07em color-mix(in srgb, var(--fg) 39%, transparent);
+}
+.bloglist .row .m {
+  display: block;
+  font-size: var(--micro);
+  letter-spacing: 0.0625em;
+  color: var(--fg-3);
+  margin-top: 0.9em;
+}
+
 /* ---------- 页脚 ---------- */
 footer.site {
   /* 底部 dock 已删（导航挪回顶栏），页脚不用再给它留 7rem 的空 */

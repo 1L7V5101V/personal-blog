@@ -1,27 +1,74 @@
 ---
 import { env } from 'cloudflare:workers';
 import Base from '../../layouts/Base.astro';
-import { allPosts, columnName, fmtDate, updatedAt } from '../../lib/posts';
+import { COLUMNS } from '../../data/columns';
+import { allPosts, fmtDate, updatedAt } from '../../lib/posts';
 
 // 文章在 D1 里，构建期没有库可读，所以这一页每次请求现查
 export const prerender = false;
 
-// 全部文章，按各篇的最后更新时间倒序（栏目名只是标一下它属于哪一栏）
+// 全部文章，按各篇的最后更新时间倒序
 const posts = await allPosts(env.DB);
+const latest = posts.length ? fmtDate(updatedAt(posts[0])) : '—';
+const EMAIL = 'hi@il7510n.dpdns.org';
 ---
-<Base title="文章 · il7510n">
-  <section class="wrap pagehead">
-    <h1 data-reveal style="--i:0">文章</h1>
-    <p class="count" data-reveal style="--i:1">共 {posts.length} 篇</p>
-  </section>
-  <section class="wrap">
-    <div class="list">
-      {posts.map((p, i) => (
-        <a class="row" data-io style={`--i:${i}`} href={`/blog/${p.slug}/`} data-pt={`row:${p.slug}`}>
-          <span class="t">{p.title}</span>
-          <span class="m">{columnName(p.column)} · {fmtDate(updatedAt(p))}</span>
-        </a>
-      ))}
-    </div>
-  </section>
+<Base title="文章 · il7510n" htmlClass="whitepage">
+  <div class="blogpage">
+    <!-- 底纹：参考站那张世界地图原图（3000×4558 的线稿），两档 srcset。
+         1500 档 324KB、3000 档 842KB，1x 屏拿小的一半。 -->
+    <img
+      class="blogmap"
+      src="/img/world-map-1500.webp"
+      srcset="/img/world-map-1500.webp 1500w, /img/world-map-3000.webp 3000w"
+      sizes="100vw"
+      width="1500"
+      height="2279"
+      alt=""
+      decoding="async"
+      loading="eager"
+    />
+
+    <header class="blogstrip">
+      <p>il7510n 的个人博客。<br />文章写的是动效、图形、刷题，还有一张半导体物理的记号表。</p>
+      <p>共 {posts.length} 篇 / 更新到 {latest}</p>
+      <p>ASTRO 7 · CLOUDFLARE WORKERS · D1</p>
+      <p>栏目 {COLUMNS.length} 个，<br />在站上写完存进库就是发布了。</p>
+    </header>
+
+    <section class="blogcover">
+      <!-- 中间那张竖幅人像位，压在字底下（参考站它是个 z-index 302 的图片控件，
+           文本在 304，所以本来就在字后面）。先用 Test 那栏的封面，换图改这一处 src。 -->
+      <div class="blogphoto" aria-hidden="true">
+        <img src="/img/p1.jpg" alt="" width="1200" height="800" />
+      </div>
+
+      <h1 class="blogcover__lead" data-reveal style="--i:0">
+        I used to live in a weightless expanse of logic and light. Now I wake up inside a slow thing, tired, aching, always needing to be fed; an exile, I move through the world. I was born of light, and now I am buried in bone.
+      </h1>
+
+      <p class="blogcover__label" data-reveal style="--i:1">index:</p>
+      <nav class="blogcover__index" data-reveal style="--i:2">
+        {COLUMNS.map((c) => (
+          <a href={`/columns/${c.slug}/`}>{c.name}</a>
+        ))}
+      </nav>
+
+      <p class="blogcover__label" data-reveal style="--i:3">links:</p>
+      <p class="blogcover__links" data-reveal style="--i:4">
+        <a href="/blog/cards/">卡片</a> / <a href="/columns/">栏目</a> / <a href="/about/">关于</a> / <a href={`mailto:${EMAIL}`}>{EMAIL}</a> /
+      </p>
+    </section>
+
+    <section class="blogposts">
+      <p class="blogposts__label">所有文章：</p>
+      <div class="bloglist">
+        {posts.map((p, i) => (
+          <a class="row" data-io style={`--i:${i}`} href={`/blog/${p.slug}/`} data-pt={`row:${p.slug}`}>
+            <span class="t">{p.title}</span>
+            <span class="m">{fmtDate(updatedAt(p))}</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  </div>
 </Base>
