@@ -83,11 +83,13 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
    垫在所有内容之下（z-index -1，落在 html 的黑底之上）：光只照黑场，不压在卡和白纸上，
    白卡白纸上透出来的那圈红边就是「光在场里」（同 .lightbar 的取舍）。
    颜色用 --accent —— 全站最亮的那个红，也是唯一会发光的红。
+   亮度靠面积不靠亮心：`--size` 就是这团光的直径（渐变用 closest-side，可见半径正好是它的一半），
+   透明度从圆心一条直线化到边缘、中途不设台阶。
    位置由 JS 每帧写 transform（走 __fx 的统一 rAF），所以点亮时自成一层。
    JS 那边的开关是「有鼠标的设备 + 不要求减少动效 + 宽度 > 768px」（见 src/scripts/mouse-light.ts），
    条件不满足时这层一直是 opacity 0，也不给它合成层。 */
 .mouselight {
-  --size: clamp(280px, 41vmax, 650px);
+  --size: clamp(560px, 66vmax, 1040px);
   position: fixed;
   left: 0;
   top: 0;
@@ -97,12 +99,10 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.45s var(--ease-out);
-  /* 中段给个台阶、尾段化得慢，不出硬边 */
   background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--accent) 26%, transparent) 0%,
-    color-mix(in srgb, var(--accent) 13%, transparent) 28%,
-    transparent 48%
+    circle closest-side,
+    color-mix(in srgb, var(--accent) 15%, transparent) 0%,
+    transparent 100%
   );
 }
 .mouselight.is-on { opacity: 1; }

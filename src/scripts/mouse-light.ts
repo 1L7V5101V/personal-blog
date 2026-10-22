@@ -9,7 +9,7 @@ const hoverable = matchMedia('(hover: hover) and (prefers-reduced-motion: no-pre
 const narrow = matchMedia('(max-width: 768px)').matches;
 
 if (el && hoverable && !narrow) {
-  const EASE = 0.16;   // 每帧追近 16%：τ ≈ 100ms（和阅读导引光球同一类补间手感）
+  const EASE = 0.3;    // 每帧追近 30%：τ ≈ 50ms（和阅读导引光球同一类补间手感，但尾巴压到半秒以内）
 
   let tx = 0, ty = 0;      // 指针实际位置
   let x = 0, y = 0;        // 光当前位置
