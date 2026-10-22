@@ -1373,38 +1373,752 @@ footer.site {
 }
 
 /* ============================================================
-   站上写作（/write/栏目/，只在本地 dev 出现）
+   站上写作（/write/栏目/）：一台打字机
    ------------------------------------------------------------
-   纸面复用文章页那一张（.prose .paper + 上面整段阅读导引），底下压一块写作台：
-   上面写 Markdown，纸上实时排出来。所以这一节只有「台子」是新东西，
-   标尺 / 红线 / 红球 / 排版全走文章页已有的规则。
-   ⚠ 台子是实底 --bg，不给 backdrop-filter：底部 dock 当初就是因为每帧模糊的
-   代价被整个删掉的（见「暗色系下的硬规则」第 3 条），别再犯一遍。
+   界面整体搬自 Typewriter-Nocturne（Chaosnap 的 Electron 终端 fork）：
+   顶上一条工具条 → 一张纸（还是文章页那一张，标尺 / 红线 / 红球全走原规则）→
+   底下一条固定台面（轨道 + 台车 + 卷筒 + 摊在机器上的 Markdown 源）+ 右侧一台调光台。
+   四套配色 = 它自己的三套主题 + 一套从本站人像图重新采样的。
+   ⚠ 台面和抽屉都是实底，不给 backdrop-filter：底部 dock 当初就是因为每帧模糊的代价
+     被整个删掉的（见「暗色系下的硬规则」第 3 条），别再犯一遍。
+   ⚠ 逐帧可变的量只有 --car-x / --car-lift / --car-tilt / --strike / --platen / --feed /
+     --bell-a / --lamp-x（desk-machine.ts 量化之后写在 html 上）。CSS 这边一律只吃
+     transform 和 opacity —— 谁在这里改成 width / left / background-position，谁每帧重排。
    ============================================================ */
-.writing {
-  /* 纸面要能整张滚到台子上方，不然读到文末就被 fixed 的台子压住 */
-  padding-bottom: calc(38vh + 6rem);
-}
-.paper .hint { color: var(--ink-3); }
-.prose p.hint { color: var(--ink-3); }
 
-.desk {
+/* ---------- 四套主题：颜色的唯一出处 ----------
+   前三套的 room / paper / ink / metal / light 值是从 Typewriter-Nocturne 的 themes/
+   里逐项抄来的（不是目测），第四套全部走这一站文件顶那张采样表：
+     纸 = 白亮光带 #dfebf3 · 纸边 = 卡上的发丝线 #cdd6dc · 墨 = --ink 那三档暖棕
+     光 = 红光带溢光边缘 #ed6148 · 信号红 = 红光带亮部 #bf3223 · 红带主体 #982d1f
+     屋子 = 黑场 #0b0b0c，墙脚 = 暗部采样 #181914
+   ⚠ --desk-chrome 是「屋里那面暗墙上能写字的那个值」，不是纸上的墨：
+     纸与墨 / 人像两套的纸本身就是亮的，所以取纸；深夜书房 / 月下两套的纸是暗的，所以取墨。
+     报头、调光台、机器上的标题与地址全都走它 —— 用墨写就会变成暗墙上写暗字（第一版就踩了）。
+   ⚠ 选择器只写 [data-desk-theme='x']、不带元素名：同一批变量 html 要用（真界面），
+     抽屉里的色板卡也要用（每张卡预览自己那一套）。一条声明两边命中，不用抄第二份。
+   ⚠ shade（灯把屋子压多黑）不在这儿，在 desk-studio.ts 的 SHADE：那个数要参与计算，
+     而颜色要被 DOM 继承。改一套主题必须同时动两处。 */
+[data-desk-theme='paper'] {
+  --desk-room: #241a14;
+  --desk-room-edge: #070504;
+  --desk-paper: #f4ecdb;
+  --desk-paper-edge: #e1d1b0;
+  --desk-ink: #2b231c;
+  --desk-ink-2: #6e6153;
+  --desk-ink-3: #a89a85;
+  --desk-chrome: #f4ecdb;
+  --desk-accent: #b08a4a;
+  --desk-accent-soft: #d9c08a;
+  --desk-border: #c9b48e;
+  --desk-metal: #b8904c;
+  /* --desk-trim = 三维那台机器上「装饰件」的色（它 scene.trim）：只有 WebGL 读得到，
+     但颜色仍然只写在这四条里，desk-3d.ts 从 computed style 取（和 SHADE / SCENE3D 的分工一致） */
+  --desk-trim: #c9a35c;
+  --desk-metal-hi: #f3dca4;
+  --desk-metal-lo: #5e431c;
+  --desk-ribbon: #8e2f25;
+  --desk-lamp: #ffd29a;
+  --desk-veil: 0.35;
+}
+[data-desk-theme='study'] {
+  --desk-room: #140f0b;
+  --desk-room-edge: #030202;
+  --desk-paper: #1c1714;
+  --desk-paper-edge: #2c241e;
+  --desk-ink: #eadfc8;
+  --desk-ink-2: #a39580;
+  --desk-ink-3: #6b5f52;
+  --desk-chrome: #eadfc8;
+  --desk-accent: #c9a45c;
+  --desk-accent-soft: #8a6f3d;
+  --desk-border: #3a2f27;
+  --desk-metal: #c9a45c;
+  --desk-trim: #c9a45c;
+  --desk-metal-hi: #f4dca0;
+  --desk-metal-lo: #4f3a17;
+  --desk-ribbon: #7a2a20;
+  --desk-lamp: #ffb35c;
+  --desk-veil: 0.6;
+}
+[data-desk-theme='moon'] {
+  --desk-room: #0e0e1a;
+  --desk-room-edge: #030307;
+  --desk-paper: #171826;
+  --desk-paper-edge: #26283e;
+  --desk-ink: #dcdcec;
+  --desk-ink-2: #9496b4;
+  --desk-ink-3: #5c5e7c;
+  --desk-chrome: #dcdcec;
+  --desk-accent: #b7bdd6;
+  --desk-accent-soft: #6e7396;
+  --desk-border: #2c2e48;
+  --desk-metal: #aeb4c8;
+  --desk-trim: #b7bdd6;
+  --desk-metal-hi: #eef0fa;
+  --desk-metal-lo: #3e4258;
+  --desk-ribbon: #4a3f7a;
+  --desk-lamp: #c9d4ff;
+  --desk-veil: 0.55;
+}
+[data-desk-theme='portrait'] {
+  --desk-room: #0b0b0c;
+  --desk-room-edge: #181914;
+  --desk-paper: #dfebf3;
+  --desk-paper-edge: #cdd6dc;
+  --desk-ink: #4a2f22;
+  --desk-ink-2: #6b4a35;
+  --desk-ink-3: #9c8069;
+  --desk-chrome: #dfebf3;
+  --desk-accent: #bf3223;
+  --desk-accent-soft: #ed6148;
+  --desk-border: #232a2f;
+  --desk-metal: #8f9ba3;
+  --desk-trim: #8f9ba3;
+  --desk-metal-hi: #dfebf3;
+  --desk-metal-lo: #14181a;
+  --desk-ribbon: #982d1f;
+  --desk-lamp: #ed6148;
+  --desk-veil: 0.5;
+}
+
+/* ---------- 这一页的几何、字体、以及站点 token 到主题 token 的接线 ----------
+   --desk-tray-w 抄它 stage-layout.ts 那条：sheetWidth = max(160, min(视口 - 两边距, 1240))，
+   边距 = clamp(视口·8.5%, 64, 150) ×2。它那条窄屏线在 720，本站一贯用 768（见下）。
+   字体三条栈也是它的（UI_SERIF / DISPLAY_SERIF / 终端等宽），主题不带字体，所以写在这一层。
+   ⚠ 纸面（.prose .paper）不动字体：那张纸必须和读者最后看到的一模一样，
+     换字体就等于预览失效。打字机味道只给机器和外壳。 */
+html.deskpage {
+  --desk-serif: "EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --desk-display: "Cormorant Garamond", "EB Garamond", "Iowan Old Style", Georgia, serif;
+  --desk-mono: "Courier Prime", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --desk-r: 12px;                /* 面板：它的 material.radius.window */
+  --desk-r-sm: 6px;              /* 控件与纸舌：它的 radius.control */
+  --desk-bar-h: 90px;            /* 报头两行：开关 46 + 标题/地址/存 44 */
+  --desk-bar-row: 46px;
+  /* 机器高照它的 layout()：machineH = clamp(H·0.3, 160, 300)。整台机器按底部钉在视口下缘 */
+  --machine-h: clamp(160px, 30vh, 300px);
+  --desk-side: clamp(64px, 8.5vw, 150px);
+  --desk-tray-w: min(1240px, calc(100vw - (var(--desk-side) * 2)));
+  --desk-src-pad: clamp(14px, 1.5vw, 22px);
+  /* 这张纸上那栏字的左右进深 = 它的 padX = max(26, sheetW·6%)。
+     ⚠ 不是文章页那条 20%：那张纸是给读者看的宽纸，这张纸就是打字机本身，
+       字要占满它、只留两道边（机器上的轨道和标尺量的就是这一栏，见 syncRail）。 */
+  --desk-pad-x: max(26px, calc(var(--desk-tray-w) * 0.06));
+  /* 机器比纸宽出来的那一段：它的 reach = min(sheetX·0.45, 90)。卷筒两头探到纸的外面，
+     纸才读成「夹在一台机器里」—— 一头和纸一样宽的滚筒就是一根工具栏（用户 2026-10 指出没有悬空感）*/
+  --desk-reach: min(calc(var(--desk-side) * 0.45), 90px);
+  /* 顶栏、纸面、台面全部靠这条对齐到源纸上那行字 */
+  --desk-gutter: max(1.25rem, calc(50vw - (var(--desk-tray-w) / 2) + var(--desk-pad-x)));
+  /* 卷纸：desk-machine.ts 往下推的那一段，让正在打的那一行落在压纸杆上（见那里的 ridePlaten） */
+  --desk-tuck: 0px;
+
+  /* 站点那一套全接过来：纸上的正文、阅读导引的横线和红球、报头，
+     一处改四处都跟着走（--ink-red 接到主题信号色，导引那条红线在暗主题里本来就压不出来） */
+  --bg: var(--desk-room);
+  --paper: var(--desk-paper);
+  --paper-line: var(--desk-paper-edge);
+  --ink: var(--desk-ink);
+  --ink-2: var(--desk-ink-2);
+  --ink-3: var(--desk-ink-3);
+  --accent: var(--desk-accent);
+  --ink-red: var(--desk-accent);
+  /* --fg 那三个是「写在屋里那面墙上」的字：导引的刻度、报头、抽屉全走它。
+     绝对不能接到 --desk-ink 上 —— 纸与墨 / 人像两套的墨是给亮纸用的深色，
+     往暗墙上一放就等于消失了（第一版就踩了，见上面那段 ⚠）。 */
+  --fg: var(--desk-chrome);
+  --fg-2: color-mix(in srgb, var(--desk-chrome) 62%, transparent);
+  --fg-3: color-mix(in srgb, var(--desk-chrome) 40%, transparent);
+  --hairline: var(--desk-border);
+
+  /* JS 没跑起来之前的落点：写在 html 上，所以既不会被下面的继承挡住，
+     也会被 desk-machine.ts 的 inline 变量正常覆盖 */
+  --car-x: 0px;
+  --car-lift: 0px;
+  --car-tilt: 0deg;
+  --strike: 0px;
+  --platen: 0deg;
+  --feed: 0px;
+  --bell-a: 0;
+  --lamp-x: 50vw;
+
+  color: var(--desk-chrome);
+}
+
+/* 这一页自己就是一套界面，Base 那三件读物的东西全摘：
+   顶栏（换成了打字机的报头）、顶棚遮罩（它是给黑场正文压顶的）、
+   心电图进度条（这一页有标尺）、页脚、还有那团跟指针走的红光
+   —— 这里的光是灯打的，不该再有一团跟着鼠标走。 */
+html.deskpage .topnav,
+html.deskpage .topveil,
+html.deskpage .ecg,
+html.deskpage .mouselight,
+html.deskpage footer.site {
+  display: none;
+}
+
+/* 抽屉里那四张色板卡：[data-desk-theme] 在自己子树里重设一遍，卡面就长成那一套 */
+.swatch { position: relative; }
+
+/* ---------- 字体：三套拉丁子集（OFL，许可文本在 docs/licenses/）----------
+   EB Garamond 那条用区间而不是拆 400 / 500：Google 给两个字重返回的是同一个可变文件。 */
+@font-face {
+  font-family: "Courier Prime";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/courier-prime-latin.woff2) format('woff2');
+}
+@font-face {
+  font-family: "Courier Prime";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/fonts/courier-prime-latin-700.woff2) format('woff2');
+}
+@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(/fonts/eb-garamond-latin.woff2) format('woff2');
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonts/cormorant-garamond-latin-500.woff2) format('woff2');
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/fonts/cormorant-garamond-latin-500-italic.woff2) format('woff2');
+}
+
+/* ---------- 页面骨架 ---------- */
+.deskapp {
+  /* 光的四层要靠它拿到自己的背板：不隔离的话 multiply 会一路乘到 html 的底色上去 */
+  isolation: isolate;
+  position: relative;
+  min-height: 100svh;
+}
+/* 屋子：一面固定的墙，纸从它前面滚过去。画一次就缓存，不进 rAF */
+.deskapp::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(
+    ellipse 120% 90% at 50% 42%,
+    var(--desk-room) 0 42%,
+    var(--desk-room-edge) 100%
+  );
+}
+/* 纸落在后墙上的两道侧影：它那张纸是浮在屋里的一件东西，不是一层背景 —— 差别就在这两条边上。
+   画在**固定层**上（一条 46px 的渐变，两边各一条），不挂 box-shadow：这张纸有一万二千像素高，
+   给它套模糊投影等于每帧栅格化一块永远看不见的东西（文章页那条教训，见 AGENTS.md「长文的性能」）。
+   左右位置按现量的 --desk-sheet-w 定，所以开滚动条、换窄屏都不会错位。 */
+.deskapp::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  --edge: 46px;
+  --w: var(--desk-sheet-w, var(--desk-tray-w));
+  background-image:
+    linear-gradient(to right, rgb(0 0 0 / 0.55), transparent var(--edge)),
+    linear-gradient(to left, rgb(0 0 0 / 0.55), transparent var(--edge));
+  background-position:
+    calc(50% - (var(--w) / 2) - var(--edge)) 0,
+    calc(50% + (var(--w) / 2)) 0;
+  background-size: var(--edge) 100%, var(--edge) 100%;
+  background-repeat: no-repeat;
+}
+.writing {
+  /* 纸面要能整张滚到台面之上，否则读到文末就被机器压住 */
+  padding-top: calc(var(--desk-bar-h) + 3.5rem);
+  padding-bottom: calc(var(--machine-h) + 5rem);
+}
+/* 写作台这一张不是「浮在黑场上的一张卡片」，是铺到桌子边的整张纸：
+   底下不收圆角、不投大影子，而且再短也要长过机器 —— 机器压在纸上，不是摆在纸前面。
+   min-height 那一条 = 视口高减去这张纸自己的顶边（.writing 的 padding-top），
+   所以短到一页的稿子，纸也刚好铺到视口底。 */
+/* 这张纸的宽度就是它那张 sheet 的宽度：Nocturne 的 sheetW = 视口 − 两边距、sheetX 居中。
+   宽度给**外层容器**（.wrap 自带 margin-inline: auto，纸放它身上就不居中了），
+   进深给纸自己 —— 于是轨道、台车、标尺量的本来就是同一栏。
+   ⚠ 不再套文章页那条 padding-inline: 20%：那张纸是给读者看的宽纸，这张纸就是打字机本身。 */
+html.deskpage .wrap.article { width: var(--desk-tray-w); }
+.deskpage .paper {
+  padding-inline: var(--desk-pad-x);
+  /* 往下推纸 = 只在内容上面加空间，纸本身不动（它的顶边还钉在书写区顶上） */
+  padding-block-start: calc(clamp(2rem, 5.5vw, 5rem) + var(--desk-tuck));
+  /* 这张纸四个角都是方的：它那张 sheet 是一个矩形，圆角会立刻读成「一张卡片浮在黑场上」，
+     而写作台要的是「一沓纸夹在机器里」。（文章页那张纸的圆角不动。） */
+  border-radius: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--desk-paper-edge) 70%, transparent);
+  min-height: calc(100svh - (var(--desk-bar-h) + 3.5rem));
+}
+/* ---------- 纸的两副面孔 ----------
+   打字机那副（html.desk-typed）：整张纸都是等宽源文，没有排版这一步 —— Nocturne 那张纸。
+   排好的那副：纸上就是读者看到的正文，光标那一条露源文。
+   两副共用一套字号/行距/左右进深（--desk-type / --desk-leading 和 .desk-line 的那对边距），
+   所以切换时字不会跳位，只有「排没排」这一件事变了。 */
+/* ⚠ 选择器要带上 html.deskpage 这一级：下面还有一条 `html.deskpage .prose pre`
+     给代码块配底色（四套主题里挑出来的一条），特异性比 `.prose .desk-line` 高，
+     不压住它的话每一行源文都会顶着一块灰底（实测踩过）。 */
+html.deskpage .prose pre.desk-line {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  margin: 0;
+  margin-inline: -0.5em;
+  padding: 0.15em 0.5em;
+  color: var(--desk-ink);
+  font-family: var(--desk-mono);
+  font-size: var(--desk-type, 15px);
+  line-height: var(--desk-leading, 1.4);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+/* 标题在这一副里也换成打字机字，但保留它的大小 —— 整张纸等宽不等于整张纸一样大 */
+.desk-typed .paper h1 { font-family: var(--desk-mono); letter-spacing: 0.01em; }
+/* 阅读导引量的是排好的标题和行；纸上全是源文时它没有可量的东西，整层摘掉 */
+.desk-typed .readguide { display: none; }
+
+/* 代码块的底色原来是写死的 #f2ece1（浅色时代的暖纸底），四套主题里它是唯一会挑出来的地方 */
+html.deskpage .prose code,
+html.deskpage .prose pre {
+  background: color-mix(in srgb, var(--desk-ink) 8%, transparent);
+}
+
+/* ---------- 报头（两行：开关 / 这一篇的标题·地址·存）---------- */
+.deskbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 24;                 /* 台面之上：调光台和报头都压得住机器 */
+  display: flex;
+  flex-direction: column;
+  height: var(--desk-bar-h);
+  padding-inline: var(--desk-gutter);
+  font-family: var(--desk-serif);
+  font-size: 0.92rem;
+  background-color: color-mix(in srgb, var(--desk-room) 88%, #000);
+  border-bottom: 1px solid color-mix(in srgb, var(--desk-border) 70%, transparent);
+}
+/* 上面那行还是原来那条 46px 的开关带 */
+.deskbar__row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  height: var(--desk-bar-row);
+  flex: none;
+}
+.deskbar__brand {
+  font-family: var(--desk-display);
+  font-size: 1.06rem;
+  letter-spacing: 0.01em;
+  color: var(--desk-chrome);
+}
+.deskbar__where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--fg-3);
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+}
+.deskbar__tools { display: flex; gap: 0.4rem; }
+.tool {
+  border: 1px solid color-mix(in srgb, var(--desk-border) 80%, transparent);
+  border-radius: var(--desk-r-sm);
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  transition: color 0.24s var(--ease-out), border-color 0.24s var(--ease-out);
+}
+.tool:hover { color: var(--desk-accent); border-color: var(--desk-accent); }
+/* 按下去的状态：边框和字一起转过来（颜色/透明度的变化，减动效下留着） */
+.tool[aria-pressed='true'],
+.tool[aria-expanded='true'] {
+  color: var(--desk-accent);
+  border-color: color-mix(in srgb, var(--desk-accent) 70%, transparent);
+}
+
+/* ---------- 光的四层 ----------
+   顺序照 Nocturne 的 z 序：纸 → lamp(乘) → glow(屏) → 浮尘 → 机器 → 暗角。
+   ⚠ 两层各只干一件事，而且只有 glow 那层在动：
+     lamp 是全屏一层**均匀**的黑（乘）=「这间屋子有多暗」，静止、不跟灯位走；
+     glow 是跟着台车走的一团光（屏）=「灯照着哪一点」。
+     想给它加模糊或阴影之前先想清楚：面积 × 每帧位移就是每帧的栅格预算。
+   ⚠ 压暗那层**不能**做成跟着灯走的圆形渐变：方盒子的四个角会留住最黑那一档，
+     于是灯斑的边界直接读成一块灰板的边（第一版就是这个）。
+     光斑的形状只由 glow 那层负责 —— 它的渐变末端是 transparent，盒子边看不出来。
+   ⚠ 光斑中心跟着台车走 = 灯照着正在打字的那一点（真机器就这么摆）。
+     纸是文档流里滚的，光是固定在视口里的：滚过光斑的时候字会一段段亮起来，
+     这是有意的（光打在场景里，不是打在纸上），和鼠标光晕那条取舍同源。 */
+.desklamp {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  background-color: rgb(0 0 0 / var(--desk-dark, 0.2));
+  /* 再加一档「离灯越远越暗」：灯在机器上方那一线，纸往上走就是往暗处走。
+     它那张纸的体积感是靠落在纸上的影（ShadowMaterial，亮纸 0.4 / 暗纸 0.6）读出来的，
+     亮纸上再加白光是加不出来的（暗色系规则 5：白光照白面几乎不亮），所以这一档只能往黑里做。
+     渐变的上沿就是视口顶，看不见盒子边 —— 上面那条 ⚠ 禁的是拿这层画圆形光斑。 */
+  background-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.4) 0,
+    rgb(0 0 0 / 0.1) 36%,
+    transparent 64%
+  );
+}
+.deskglow {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  mix-blend-mode: screen;
+  /* 纵向：从台面上沿往上一段，段长 = 灯位（desk-studio.ts 的 --desk-lamp-lift） */
+  --lamp-y: calc(100vh - var(--machine-h) - var(--desk-lamp-lift, 70px));
+  width: var(--desk-lamp-d, 100vw);
+  height: var(--desk-lamp-d, 100vw);
+  transform: translate3d(
+    calc(var(--lamp-x) - (var(--desk-lamp-d, 100vw) / 2)),
+    calc(var(--lamp-y) - (var(--desk-lamp-d, 100vw) / 2)),
+    0
+  );
+  pointer-events: none;
+  will-change: transform;
+  /* 强度只在这层的透明度上：色板里的 --desk-lamp 就是灯丝那个颜色，不动它 */
+  opacity: var(--desk-glow-a, 0);
+  background-image: radial-gradient(
+    circle closest-side,
+    color-mix(in srgb, var(--desk-lamp) calc(var(--desk-lamp-in, 80) * 1%), transparent) 0,
+    color-mix(in srgb, var(--desk-lamp) calc(var(--desk-lamp-in, 80) * 40%), transparent)
+      calc(var(--desk-lamp-mid, 55) * 1%),
+    transparent 100%
+  );
+}
+/* 压印那一层（desk-ink.ts）：盖在纸上的字之上、灯之下 —— 墨是在灯下落的，
+   不该被灯光盖过去；也不吃指针。 */
+.deskink {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+html.desk-off .deskglow { display: none; }
+/* 浮尘：三层不同疏密的点各自慢慢飘。一个元素、只有 transform 在动，
+   所以它不进 rAF（CSS 动画自己走合成线程）。Nocturne 那边是 110 个 DOM 粒子，
+   在这儿要它每帧写 110 支 transform = 110 个层，正是要避开的东西。 */
+.deskdust {
+  position: fixed;
+  inset: -10% -10% 0 -10%;
+  z-index: 6;
+  pointer-events: none;
+  opacity: calc(var(--desk-dust-a, 0) * 0.5);
+  background-image:
+    radial-gradient(circle, rgb(255 248 232 / 0.5) 0.7px, transparent 1.2px),
+    radial-gradient(circle, rgb(255 248 232 / 0.32) 0.5px, transparent 1px),
+    radial-gradient(circle, rgb(255 248 232 / 0.22) 1px, transparent 1.6px);
+  background-size: 130px 130px, 210px 210px, 340px 340px;
+  animation: deskdust 62s linear infinite;
+  will-change: transform;
+}
+@keyframes deskdust {
+  to { transform: translate3d(-90px, 62px, 0); }
+}
+/* 胶片颗粒：一张 128×128 的噪点平铺，常驻一点点（1.5/255），
+   上限走滑条。只吃 opacity，不动 blend —— 全屏叠一层 blend 只为噪点是浪费。 */
+.deskgrain {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  opacity: var(--desk-grain-a, 0.006);
+  background-image: url(/img/grain.png);
+  background-size: 128px 128px;
+}
+/* 暗角：一条静态的椭圆，四套主题各有各的深浅（--desk-veil） */
+.deskveil {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background-image: radial-gradient(
+    ellipse 85% 80% at 50% 45%,
+    transparent 55%,
+    rgb(0 0 0 / calc(0.55 * var(--desk-veil, 0.4))) 100%
+  );
+}
+
+/* ---------- 三维那台机器（desk-3d.ts）----------
+   整屏一张 canvas，压在纸上、压在台面板之上、报头与抽屉之下。
+   它自己带灯、带影、带遮挡体，所以起来之后 CSS 那台的可见件全部让位：
+   轨道和标尺的**盒子**还得留着（ridePlaten 和 syncRail 读它们的 rect），
+   所以是 visibility: hidden 而不是 display: none —— 摘掉布局那两个量就跳了。
+   透明度这条过渡留着：减动效禁的是位移和缩放，不是淡入（见坑 6）。 */
+.desk3d {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.32s var(--ease-out);
+}
+html.desk3d-on .desk3d { opacity: 1; }
+html.desk3d-on .machine { background: none; }
+html.desk3d-on .machine::before,
+html.desk3d-on .rail,
+html.desk3d-on .ruler,
+html.desk3d-on .frame { visibility: hidden; }
+/* ---------- 机器 ----------
+   台面固定在最下面一条。里面从上到下：轨道（台车走的那根）、卷筒（两个旋钮 + 纸舌）、
+   然后是摊在机器上的那张纸 —— 就是标题 / 地址 / Markdown 源。 */
+.machine {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 20;                 /* 在纸面和阅读导引之上、顶栏和 ECG 之下 */
+  z-index: 20;                 /* 纸面与光层之上、报头与抽屉之下 */
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  height: 38vh;
-  min-height: 250px;
-  padding: 0.9rem max(1.5rem, calc(50% - 25.25rem)) 1rem;
-  background-color: var(--bg);
-  border-top: 1px solid var(--hairline);
+  height: var(--machine-h);
+  /* 台面的左右留白按「纸的边距减去机器探出去的那一段」给。⚠ 这里用 100%（机器自己那条版面，
+     已经是去掉滚动条的宽度）而不是 100vw：CSS 里那条 --desk-tray-w 是按 100vw 算的，
+     Windows 上差一根滚动条（实测 15px），用 vw 就会把带子挤窄、卷筒探出去的量少掉一截。
+     --desk-sheet-w 由 syncRail() 现量纸宽写进来，没量到之前退回 100vw 那条。 */
+  padding-inline: max(0px, calc((100% - (var(--desk-sheet-w, var(--desk-tray-w)))) / 2 - var(--desk-reach)));
+  font-family: var(--desk-serif);
+  /* 机器本体是**不透光**的一块：纸从它底下穿过去（纸已经铺到视口底、底下不收圆角），
+     字滚到它后面就该被挡住 —— 这才是「机器压在纸上」。
+     ⚠ 别把它改成半透明：CSS 画的这台没有它那个隐形遮挡体，透过去就是「字从机器肚子里穿出来」。
+        要那种「纸从零件缝里透出来」的效果，得等三维那台（three.js + occluder）。 */
+  background-color: var(--desk-room);
+  background-image:
+    linear-gradient(to bottom, color-mix(in srgb, var(--desk-metal-hi) 26%, transparent), transparent 6px),
+    linear-gradient(to bottom, transparent 55%, color-mix(in srgb, var(--desk-room-edge) 92%, #000));
 }
-/* 台子对齐纸上的那一栏：纸宽 min(84.2rem, …)，左右内边距各 20% → 文字栏 0.6 倍 */
-.desk__fields { display: flex; align-items: baseline; gap: 1.5rem; }
+/* ⚠ 这里曾经有一条 scroll-padding-bottom: calc(var(--machine-h) + 2.5rem)，想的是「聚焦时
+   别让光标滚到机器底下」。但浏览器在**每次输入**后都会把插入点滚进视野，并按这条内缩
+   对齐 —— 而 ridePlaten 又把纸按回压纸杆（压在机器上沿），两边每一步都差着这 38px（当前视口）：
+   敲一个字页面往下滚 38、纸再往下推 38，字就上下闪。光标该停在哪归 ridePlaten 管，
+   浏览器只负责「把它弄进视口」；滚进机器底下那一下由 focus 时补一次 seek 拉回来。 */
+/* 机器在纸上落的影：它那个渲染里铺着一张和纸一样大的 ShadowMaterial（不透明度 0.4 / 0.6，
+   色 #1a0f05），机器挡灯，纸越靠近卷筒越暗。CSS 这台做不了逐像素投影，但「纸钻进机器去」
+   这件事全靠这一条带子交代 —— 没有它，纸就是停在机器前面的一条硬边（悬空感就是这么丢的）。
+   只盖机器自己那一块版面，不去糊阅读导引的刻度。 */
+.machine::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: calc(50% - (var(--desk-sheet-w, var(--desk-tray-w)) / 2) - var(--desk-reach));
+  right: calc(50% - (var(--desk-sheet-w, var(--desk-tray-w)) / 2) - var(--desk-reach));
+  height: clamp(56px, 11vh, 120px);
+  pointer-events: none;
+  background-image: linear-gradient(
+    to top,
+    rgb(26 15 5 / 0.5) 0,
+    rgb(26 15 5 / 0.16) 46%,
+    transparent 100%
+  );
+}
+.machine__band {
+  flex: none;
+  width: 100%;
+  /* 带子比纸宽出两头各一段 reach：卷筒、旋钮、色带架都画在纸的外面，纸被夹在中间 */
+  max-width: calc(var(--desk-sheet-w, var(--desk-tray-w)) + (var(--desk-reach) * 2));
+  margin-inline: auto;
+}
+.inset { padding-inline: var(--desk-src-pad); }
+
+.rail {
+  position: relative;
+  height: 24px;
+  /* 轨道 = 一条槽 + 一条打字的咬合线。线画在 background 上，不用伪元素 */
+  background-image: linear-gradient(
+    to bottom,
+    transparent 45%,
+    color-mix(in srgb, var(--desk-metal) 55%, transparent) 46%,
+    color-mix(in srgb, var(--desk-metal-lo) 70%, transparent) 54%,
+    transparent 55%
+  );
+}
+/* 列标尺：轨道下面那一条。刻度 = 一个等宽字符宽（`ch` 就是这个字体里 0 的宽度），
+   十条一组用 repeating 渐变画 —— 等长等距的东西不建 DOM（全站老规矩）。
+   记号吃台车同一个 --car-x，所以它永远指着光标所在那一列。 */
+.ruler {
+  position: relative;
+  height: 13px;
+  margin-top: 3px;
+  font-family: var(--desk-mono);
+  font-size: var(--desk-type, 15px);
+  background-image: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--desk-metal) 62%, transparent) 0 1px,
+    transparent 1px 10ch
+  );
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 55%);
+  mask-image: linear-gradient(to bottom, transparent, #000 55%);
+}
+.ruler__mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background-color: var(--desk-accent);
+  transform: translateX(var(--car-x, 0px));
+}
+.carriage {
+  position: absolute;
+  left: 0;
+  top: 12px;
+  /* 零尺寸的锚点：--car-x 就是插入点在轨道上的偏移，挂在你身上的东西自己往两边探 */
+  width: 0;
+  height: 0;
+  transform: translate3d(var(--car-x), var(--car-lift), 0) rotate(var(--car-tilt));
+  will-change: transform;
+}
+/* 台车本体：一段黄铜夹子，居中挂在插入点上 */
+.carriage::before {
+  content: "";
+  position: absolute;
+  left: -26px;
+  top: -11px;
+  width: 52px;
+  height: 22px;
+  border-radius: 4px;
+  background-image: linear-gradient(
+    to bottom,
+    var(--desk-metal-hi) 0 2px,
+    var(--desk-metal) 2px 60%,
+    var(--desk-metal-lo)
+  );
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--desk-metal-hi) 40%, transparent);
+}
+/* 色带：横夹在车中间那一条 */
+.carriage::after {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: -2px;
+  width: 44px;
+  height: 3px;
+  background-color: var(--desk-ribbon);
+}
+/* 打字杆：每按一下沉 3.5px 再弹回（STRIKE 那个弹簧） */
+.typebar {
+  position: absolute;
+  left: -3px;
+  top: 6px;
+  width: 6px;
+  height: 13px;
+  border-radius: 1px;
+  background-color: var(--desk-metal-lo);
+  transform: translateY(var(--strike));
+}
+/* 铃：长在轨道右端（就是右边距那头）。响的时候闪，平时留一层影子 */
+.bell {
+  position: absolute;
+  right: 0;
+  top: -4px;
+  width: 15px;
+  height: 13px;
+  border-radius: 8px 8px 2px 2px;
+  background-image: linear-gradient(to bottom, var(--desk-metal-hi), var(--desk-metal));
+  opacity: calc(0.22 + 0.78 * var(--bell-a));
+}
+
+.frame {
+  position: relative;
+  height: 26px;
+  display: flex;
+  align-items: center;
+}
+.platen {
+  position: relative;
+  flex: 1;
+  height: 18px;
+  border-radius: 9px;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--desk-metal-hi) 22%, transparent) 0 1px,
+      transparent 1px 3px
+    ),
+    linear-gradient(to bottom, var(--desk-metal-hi) 0 2px, var(--desk-metal) 30%, var(--desk-metal-lo));
+}
+/* 纸舌：卷筒上面露出来的那一线纸。它那个渲染里是一截圆筒面（CylinderGeometry，半径 = 卷筒
+   半径 + 1.2，绕 0.62π）包在滚筒上，不是一条纸片：所以这儿要按纸的宽度收回来（卷筒现在比纸宽），
+   并且越往下越暗 —— 那一线暗就是纸离开滚筒时的那个弯。每过一行往上送一格（--feed）。 */
+.paperlip {
+  position: absolute;
+  left: var(--desk-reach);
+  right: var(--desk-reach);
+  top: -12px;
+  height: 14px;
+  border-radius: 3px 3px 0 0;
+  background-color: var(--desk-paper);
+  background-image: linear-gradient(
+    to bottom,
+    var(--desk-paper),
+    color-mix(in srgb, var(--desk-paper) 76%, #000)
+  );
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--desk-paper-edge) 85%, transparent);
+  transform: translateY(calc(var(--feed) * -1));
+}
+/* 旋钮：卷筒转那 10° 只有在这儿看得见（滚筒本身是根横bar，转了也转不出来） */
+.knob {
+  position: absolute;
+  top: -1px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-image: linear-gradient(135deg, var(--desk-metal-hi), var(--desk-metal-lo));
+  transform: rotate(var(--platen));
+}
+.knob--l { left: -10px; }
+.knob--r { right: -10px; }
+.knob::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 2px;
+  height: 7px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background-color: var(--desk-metal-lo);
+}
+
+/* ---------- 报头第二行：这一篇的标题、地址、存 ----------
+   这三样以前摊在机器上那张「纸」里（.tray 是 CSS 那台的下半截）。三维那台起来之后底下这一条
+   整块都是机器的零件，表单压上去就是字糊在键盘上 —— 挪到顶上来，机器那一条只画机器。
+   ⚠ 那几个 id 不能改：脚本按 f-title / f-slug / msg / save 找元素。 */
+.tray {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  height: calc(var(--desk-bar-h) - var(--desk-bar-row));
+  padding-bottom: 0.45rem;
+}
 .fld {
   display: flex;
   align-items: baseline;
@@ -1420,15 +2134,16 @@ footer.site {
   width: 100%;
   background: none;
   border: 0;
-  border-bottom: 1px solid var(--hairline);
   border-radius: 0;
   color: var(--fg);
-  font: inherit;
+  font-family: var(--desk-serif);
+  font-size: 1rem;
   padding: 0.1rem 0.2rem 0.25rem;
   cursor: text;
-  transition: border-color 0.3s;
+  transition: box-shadow 0.24s var(--ease-out), color 0.24s var(--ease-out);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--desk-border) 80%, transparent);
 }
-.fld input:focus { outline: none; border-bottom-color: var(--accent); }
+.fld input:focus { outline: none; box-shadow: 0 1px 0 var(--desk-accent); }
 .fld input::placeholder { color: var(--fg-3); }
 .path {
   flex: 1;
@@ -1436,59 +2151,319 @@ footer.site {
   align-items: baseline;
   min-width: 0;
   color: var(--fg-3);
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-family: var(--desk-mono);
   font-size: 0.85rem;
 }
 
-.desk__src {
-  flex: 1;
-  min-height: 0;               /* flex 列里不给这条，textarea 撑破台子 */
+/* 纸上正在编辑的那一块：它是 Markdown 源文，等宽、左侧一道红竖条，读得出「这一条还没排」。
+   光标离开它，这一整块就换成排好的样子（逻辑在 src/scripts/desk-paper.ts）。
+   ⚠ .desk-src 必须 position:relative：台车的镜像是 JS 挂进这个 wrapper 的，
+     它压在 wrapper 的边框盒原点上才能和 textarea 的内容盒对齐 —— 爹一挪，台车读的 x 就错。
+   ⚠ 字号和行距吃调光台那两个变量（和以前机器上那张 sheet 同源），但那是**源文**的尺寸；
+     排好的那一份照旧走文章页的 .prose，纸面的字不因为进编辑器而变。 */
+.desk-src {
+  position: relative;
+}
+.desk-src__ta {
+  display: block;
+  width: 100%;
+  min-height: 1.6em;
+  margin-inline: -0.5em;
+  padding: 0.15em 0.5em;
   background: none;
   border: 0;
-  border-radius: 0;
-  color: var(--fg-2);
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 0.92rem;
-  line-height: 1.7;
+  color: var(--desk-ink);
+  caret-color: var(--desk-accent);
+  font-family: var(--desk-mono);
+  /* 这两个数来自调光台：字号 11–22、行距 1.2–1.9（desk-studio.ts 的 RANGES） */
+  font-size: var(--desk-type, 15px);
+  line-height: var(--desk-leading, 1.4);
   resize: none;
+  overflow: hidden;          /* 高度由 JS 按内容给（textarea 自己不会长） */
   cursor: text;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--desk-accent) 55%, transparent);
+  transition: box-shadow 0.24s var(--ease-out);
 }
-.desk__src:focus { outline: none; color: var(--fg); }
-.desk__src::placeholder { color: var(--fg-3); }
+.desk-src__ta:focus {
+  outline: none;
+  box-shadow:
+    inset 3px 0 0 var(--desk-accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--desk-paper-edge) 70%, transparent);
+}
+.desk-src__ta::placeholder { color: var(--desk-ink-3); }
+/* 光标测量用的镜像：只装光标所在那一逻辑行，所以大小恒定。
+   排印属性由 JS 从 textarea 逐项抄过来 —— 抄漏一项，量出来的 x、y 和折行点就都对不上。
+   ⚠ 它必须压在 textarea 的 border box 原点上（父级 .desk-src 是 relative，
+     textarea 无边框）；textarea 有 margin-inline: -0.5em，镜像靠 JS 抄过去的
+     margin-left 一起左移 —— 少抄这一项，量出来的一切都偏半格。 */
+.deskmirror {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  z-index: -1;
+}
+.deskmirror > i {
+  /* 字宽探针：绝对定位，所以不进那一行的排版流 */
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
 
-.desk__bar { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; }
-.desk__msg {
-  flex: 1;
+/* 状态字在中间，存那颗永远顶到最右：报头这一行不给它留第二条行 */
+.tray__msg {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 0.82rem;
   color: var(--fg-3);
   /* 状态文字从「保存中」翻成红字报错，以前是瞬间换色、凭空变红：
      给颜色留一条过渡，「出事了」这一眼才跟得住。 */
   transition: color 0.24s var(--ease-out);
 }
-.desk__msg.is-error { color: var(--accent); }
-.desk__save {
+.tray__msg.is-error { color: var(--desk-accent); }
+.tray__save {
   display: flex;
   align-items: baseline;
   gap: 0.55rem;
+  flex: none;
+  margin-left: auto;           /* 永远顶到报头这一行的最右边 */
   border: 0;
-  background-color: var(--accent);
-  color: var(--bg);
-  font: inherit;
+  border-radius: var(--desk-r-sm);
+  background-color: var(--desk-accent);
+  color: var(--desk-paper);
+  font-family: var(--desk-serif);
   font-size: 0.85rem;
   padding: 0.4rem 0.85rem;
   cursor: pointer;
-  /* transform 也在这一条里：按压缩小归这个块自己管，别处不再另开一份 transition
-     （两条 transition 互相覆盖，最后生效的是文件里靠后的那条 —— 这种账最难查） */
+  /* transform 也在这一条里：按压缩小归这个块自己管，别处不再另开一份 transition */
   transition: filter 0.24s var(--ease-out), transform 160ms var(--ease-out);
 }
-.desk__save:hover { filter: brightness(1.12); }
-.desk__save em { font-style: normal; font-size: 0.75rem; opacity: 0.65; }
+.tray__save:hover { filter: brightness(1.12); }
+.tray__save:active { transform: scale(0.97); }
+.tray__save em { font-style: normal; font-size: 0.75rem; opacity: 0.65; }
 
-/* 窄屏：台子不悬浮了（38vh 的 fixed 盖住半屏，纸面没法看），改成跟在纸面后面 */
+/* ---------- 调光台抽屉 ----------
+   300px 一条，从右上拉进来。Nocturne 原版是 backdrop-filter: blur(12px)，
+   这里换成实底：本站的 dock 就是被每帧模糊干掉的（「暗色系下的硬规则」第 3 条），
+   一条 300×视口高的模糊带每帧都要重算背板，而抽屉是要开着用的。 */
+.studio {
+  position: fixed;
+  top: calc(var(--desk-bar-h) + 12px);
+  right: 12px;
+  z-index: 26;
+  width: min(300px, calc(100vw - 24px));
+  max-height: calc(100vh - var(--desk-bar-h) - var(--machine-h) - 3rem);
+  overflow-y: auto;
+  padding: 0.9rem 1rem 1.2rem;
+  border-radius: var(--desk-r);
+  background-color: color-mix(in srgb, var(--desk-room) 92%, #000);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--desk-border) 60%, transparent),
+    0 18px 44px rgb(0 0 0 / 0.55);
+  font-family: var(--desk-serif);
+  transform: translateX(calc(100% + 20px));
+  opacity: 0;
+  transition: transform 0.38s var(--ease-out), opacity 0.28s var(--ease-out);
+}
+.studio.is-open { transform: none; opacity: 1; }
+.studio__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.7rem;
+}
+.studio__title {
+  font-family: var(--desk-display);
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+}
+.studio__close {
+  border: 0;
+  background: none;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+  cursor: pointer;
+  transition: color 0.24s var(--ease-out);
+}
+.studio__close:hover { color: var(--desk-accent); }
+.grp {
+  border: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+.grp__title {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.swatch {
+  display: block;
+  border: 0;
+  border-radius: var(--desk-r-sm);
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  background-color: var(--desk-room);
+  color: var(--desk-chrome);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--desk-border) 70%, transparent);
+  transition: box-shadow 0.24s var(--ease-out);
+}
+.swatch:hover { box-shadow: inset 0 0 0 1px var(--desk-accent); }
+.swatch[aria-checked='true'] { box-shadow: inset 0 0 0 2px var(--desk-accent); }
+/* 卡面就是那一套主题的纸：Aa 用它的墨，底线用它的信号色。
+   颜色全从自己身上的 [data-desk-theme] 取，所以四张卡不用各写一份样式。 */
+.swatch__face {
+  display: block;
+  padding: 0.45rem 0.5rem 0.35rem;
+  background-color: var(--desk-paper);
+  border-bottom: 1px solid color-mix(in srgb, var(--desk-paper-edge) 80%, transparent);
+}
+.swatch__ink {
+  font-style: normal;
+  font-family: var(--desk-display);
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--desk-ink);
+}
+.swatch__rule {
+  display: block;
+  height: 2px;
+  margin-top: 0.3rem;
+  background-color: var(--desk-accent);
+}
+.swatch__name {
+  display: block;
+  padding: 0.35rem 0.5rem 0;
+  font-size: 0.85rem;
+}
+.swatch__note {
+  display: block;
+  padding: 0 0.5rem 0.45rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--desk-chrome) 55%, transparent);
+}
+.presets { display: flex; gap: 0.4rem; }
+.presets button {
+  flex: 1;
+  border: 0;
+  border-radius: var(--desk-r-sm);
+  padding: 0.3rem 0;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--fg-2);
+  background-color: color-mix(in srgb, var(--desk-room-edge) 60%, var(--desk-room));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--desk-border) 60%, transparent);
+  transition: color 0.24s var(--ease-out), box-shadow 0.24s var(--ease-out);
+}
+.presets button:hover { color: var(--desk-accent); box-shadow: inset 0 0 0 1px var(--desk-accent); }
+.ctl {
+  display: grid;
+  grid-template-columns: 3.6rem 1fr 2.6rem;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--fg-2);
+}
+.ctl__out {
+  font-family: var(--desk-mono);
+  font-size: 0.72rem;
+  text-align: right;
+  color: var(--fg-3);
+}
+.ctl input[type='range'] { width: 100%; accent-color: var(--desk-accent); cursor: ew-resize; }
+.ctl--switch { display: flex; align-items: center; justify-content: space-between; }
+.ctl--switch .ctl__name { color: var(--fg-2); }
+.sw {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  cursor: pointer;
+  background-color: color-mix(in srgb, var(--desk-border) 80%, #000);
+  transition: background-color 0.24s var(--ease-out);
+}
+.sw i {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--fg-2);
+  transition: transform 0.24s var(--ease-out), background-color 0.24s var(--ease-out);
+}
+.sw[aria-pressed='true'] { background-color: color-mix(in srgb, var(--desk-accent) 55%, #000); }
+.sw[aria-pressed='true'] i {
+  transform: translateX(16px);
+  background-color: var(--desk-accent-soft);
+}
+
+/* ---------- 专注模式：把读者的东西全摘掉，只留纸、机器、灯 ----------
+   报头留着（它是唯一的出口），抽屉自己会关。 */
+html.desk-focus .readguide,
+html.desk-focus .deskbar__where { display: none; }
+html.desk-focus .writing { padding-top: 1.5rem; }
+
+/* ============================================================
+   窄屏与减动效
+   ------------------------------------------------------------
+   一条查询写两件兜底（同项目规矩）：
+   - ≤768px：机器不悬浮了（32vh 的 fixed 盖住小半屏，纸没法看），改成跟在纸后面；
+     边距换成 20px（Nocturne 那条窄屏线在 720，本站一贯用 768，取我们的那条）；
+     光的四层整层摘掉 —— 手机竖屏里光斑和暗角只读成「屏幕脏了」。
+   - 减动效：浮尘和台车的不规则运动停掉（位移），但灯、暗角、颗粒这些**静态**的
+     颜色场留着 —— 它们不是动效；台车仍然落到光标那（seek 直接写终值），只是不走弹簧。
+   ============================================================ */
 @media (max-width: 768px) {
-  .desk { position: static; height: auto; min-height: 0; }
-  .desk__src { min-height: 45vh; }
-  .writing { padding-bottom: 3rem; }
+  html.deskpage {
+    /* Nocturne 窄屏只做一件事：左右边距从视口的 8.5% 收到 40px，机器照画、灯照开。
+       以前这里把整条轨道和两层光都摘了，于是手机上「打字机」整个不见了 —— 撤掉那条。 */
+    --desk-side: 40px;
+    --machine-h: clamp(150px, 30vh, 240px);
+    --desk-tray-w: min(1240px, calc(100vw - 2.5rem));
+  }
+  .tray { max-width: none; gap: 0.8rem; }
+  /* 窄屏上「标题」「地址」这两个词让位给字段本身：placeholder 已经说了这是什么。
+     ⚠ 不能整条 .fld > span 隐藏 —— 地址那栏的 /blog/…/ 那个 .path 也是 span */
+  .fld--title > span,
+  .fld--slug > span:not(.path) { display: none; }
+  .writing { padding-top: calc(var(--desk-bar-h) + 1rem); }
+  /* 顶边矮了一截，纸要铺到视口底就得跟着改这条（和上面 padding-top 同一个数） */
+  .deskpage .paper { min-height: calc(100svh - (var(--desk-bar-h) + 1rem)); }
+  .studio { width: calc(100vw - 24px); max-height: 60vh; }
+  .deskbar { gap: 0.6rem; }
+  .deskbar__where { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deskdust { animation: none; }
+  .deskglow { will-change: auto; }
+  .studio { transition: opacity 0.2s linear; transform: none; }
+  .studio:not(.is-open) { display: none; }
+  .sw i { transition: background-color 0.24s var(--ease-out); }
 }
 
 /* ---------- About 时间线 ---------- */

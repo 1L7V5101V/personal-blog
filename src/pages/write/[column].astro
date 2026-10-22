@@ -5,6 +5,8 @@ import { columnOf } from '../../data/columns';
 import { fmtDate } from '../../lib/posts';
 import { canWrite } from '../../lib/access';
 import { loadPost } from '../../lib/writer';
+// 调光台的数值表要在构建期就能读（滑块的 min/max/step 打在标记上），所以 frontmatter 也引它
+import { RANGES, THEMES, type DeskSettings } from '../../scripts/desk-studio';
 // 预览里有公式就要 KaTeX 的 CSS，和文章页同一份
 import 'katex/dist/katex.min.css';
 
@@ -21,7 +23,7 @@ const authorized = await canWrite(Astro.request, env);
 // 这一页的内容随登录状态变（那颗按钮），不能让边缘按 URL 共享缓存
 Astro.response.headers.set('Cache-Control', 'private, max-age=0, must-revalidate');
 if (!authorized) {
-  return Astro.redirect('/');
+  return Astro.redirect('/blog/');
 }
 // 留个记号给栏目页看：Access 只覆盖 /write*，栏目页那种公开路径拿不到
 // CF-Access-JWT，只能靠这个记号决定露不露「＋ 撰写文章」。它不是凭证 ——
@@ -44,78 +46,437 @@ if (post && post.column_slug !== col.slug) {
 
 const today = fmtDate(new Date());
 const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
+
+// 抽屉里的旋钮：分组写在这一份表上，数值区间全部从 RANGES 读（不在标记里写第二遍数字）
+const GROUPS: { title: string; items: { k: keyof typeof RANGES; label: string }[] }[] = [
+  {
+    title: '字',
+    items: [
+      { k: 'type', label: '字号' },
+      { k: 'leading', label: '行距' },
+    ],
+  },
+  {
+    title: '灯',
+    items: [
+      { k: 'intensity', label: '亮度' },
+      { k: 'spread', label: '光锥' },
+      { k: 'height', label: '灯位' },
+      { k: 'softness', label: '柔边' },
+    ],
+  },
+  {
+    title: '屋子',
+    items: [
+      { k: 'dust', label: '浮尘' },
+      { k: 'grain', label: '颗粒' },
+    ],
+  },
+  { title: '声', items: [{ k: 'volume', label: '音量' }] },
+];
+const TOGGLES: { k: 'sound' | 'focus' | 'typed'; label: string; hint: string }[] = [
+  { k: 'typed', label: '打字机字', hint: '整张纸等宽源文，不排 Markdown；再按一下换回排好的样子' },
+  { k: 'sound', label: '击键声', hint: '合成，不放音频文件' },
+  { k: 'focus', label: '专注', hint: '摘掉顶栏工具与阅读导引' },
+];
 ---
-<Base title={`${post ? '修改文章' : '撰写文章'} · ${col.name} · il7510n`}>
-  <div class="wrap article writing">
-    <!-- 纸面就是文章页那一张：黑场里的白纸 + 暖棕墨水 + 阅读导引（标尺 / 贯穿红线 / 红球）。
-         写作台里每改一行，这里就重新排一次 —— 看到的就是发布后的样子。
-         大标题（h1）由标题框实时喂进来，正文的块从它后面往下插。 -->
-    <article class="prose paper" id="page">
-      <a class="backlink u" href={`/columns/${col.slug}/`} data-backlink>← {col.name}</a>
-      <div class="meta">
-        <span>{shown}</span>
-        <span class="hint">{post ? '编辑中' : '草稿'}</span>
+<Base title={`${post ? '修改文章' : '撰写文章'} · ${col.name} · il7510n`} htmlClass="deskpage">
+  <div class="deskapp" id="app">
+    <!-- 报头两行：上面那行是这一页的开关，下面那行是「这篇」的标题、地址、存。
+         标题/地址以前摊在机器上那张纸里，三维那台机器起来之后那块版面是机器的了（它自己的键盘、
+         色带、铭牌全在那儿），表单压上去就是一堆字糊在零件上 —— 挪到顶上来，和它一样：
+         机器那一条只画机器，控制全在 toolbar。 -->
+    <header class="deskbar">
+      <div class="deskbar__row">
+        <a class="deskbar__brand u" href={`/columns/${col.slug}/`}>← {col.name}</a>
+        <span class="deskbar__where">{shown} · {post ? '编辑中' : '草稿'}</span>
+        <div class="deskbar__tools">
+          {TOGGLES.map((t) => (
+            <button type="button" class="tool" data-desk-toggle={t.k} aria-pressed="false" title={t.hint}>{t.label}</button>
+          ))}
+          <button type="button" class="tool" id="studio-btn" aria-expanded="false" aria-controls="studio">调光台</button>
+        </div>
       </div>
-      <h1 id="m-title">{post?.title || '未命名'}</h1>
-    </article>
-    <!-- 正文还没写时纸面上那句话。template 不产生盒子，阅读导引扫不到它，
-         等真有了正文就整个不被引用 -->
-    <template id="hint"><p class="hint">正文还是空的。下面那块写作台里写 Markdown，这张纸上就实时排出来。</p></template>
-  </div>
+      <form class="tray" id="desk" autocomplete="off"
+        data-column={col.slug}
+        data-mode={post ? 'edit' : 'new'}
+        data-slug={post?.slug ?? ''}>
+        <label class="fld fld--title">
+          <span>标题</span>
+          <input id="f-title" type="text" placeholder="这篇文章叫什么" value={post?.title ?? ''}>
+        </label>
+        <label class="fld fld--slug">
+          <span>地址</span>
+          <span class="path">/blog/<input id="f-slug" type="text" spellcheck="false" placeholder="slug" value={post?.slug ?? ''} readonly={!!post}>/</span>
+        </label>
+        <!-- 正文不在这里写：纸面自己就是编辑器（src/scripts/desk-paper.ts） -->
+        <span class="tray__msg" id="msg"></span>
+        <button class="tray__save" id="save" type="submit">{post ? '存回这篇' : '存成文章'}<em>Ctrl S</em></button>
+      </form>
+    </header>
 
-  <form class="desk" id="desk" autocomplete="off"
-    data-column={col.slug}
-    data-mode={post ? 'edit' : 'new'}
-    data-slug={post?.slug ?? ''}>
-    <div class="desk__fields">
-      <label class="fld fld--title">
-        <span>标题</span>
-        <input id="f-title" type="text" placeholder="这篇文章叫什么" value={post?.title ?? ''}>
-      </label>
-      <label class="fld fld--slug">
-        <span>地址</span>
-        <span class="path">/blog/<input id="f-slug" type="text" spellcheck="false" placeholder="slug" value={post?.slug ?? ''} readonly={!!post}>/</span>
-      </label>
+    <!-- 纸面就是文章页那一张：一张有边有圆角的纸 + 阅读导引（标尺 / 贯穿红线 / 红球）。
+         这一张纸**本身就是编辑器**：光标停在哪一块就露出那一块的源文，离开就就地排好，
+         排的是 src/lib/render.ts 那一份，和读者浏览器里跑的完全一样。
+         编辑已有的那篇时源文由服务端从库里取出来挂在 data-body 上（挂在属性里，
+         不挂在 template 的文本里 —— 正文里本来就有原始 HTML，当 HTML 解析会丢标签）。
+         大标题（h1）由上面那个「标题」框实时喂进来。 -->
+    <div class="deskstage">
+      <div class="wrap article writing">
+        <article class="prose paper" id="page" data-body={post?.body_md ?? ''}>
+          <h1 id="m-title">{post?.title || '未命名'}</h1>
+        </article>
+      </div>
     </div>
-    <textarea class="desk__src" id="f-body" spellcheck="false" data-lenis-prevent
-      placeholder="## 小节标题&#10;&#10;正文直接写。表格、代码块、$E=mc^2$ 这类公式都按文章页那套排版。&#10;页面顶上的大标题用左边那个「标题」框，正文里就不必再来一个 # 。">{post?.body_md ?? ''}</textarea>
-    <div class="desk__bar">
-      <span class="desk__msg" id="msg"></span>
-      <button class="desk__save" id="save" type="submit">{post ? '存回这篇' : '存成文章'}<em>Ctrl S</em></button>
-    </div>
-  </form>
 
-  <!-- 阅读导引：和文章详情页同一份标记、同一份脚本（src/scripts/readguide.ts） -->
-  <div class="readguide" aria-hidden="true">
-    <div class="readguide__ruler">
-      <div class="readguide__track"><div class="readguide__body"></div></div>
+    <!-- 三维那台机器：整屏一张 canvas。它靠纸面上那张隐形遮挡体把「纸后面」和「纸前面」分开，
+         所以 DOM 上这一栏字是从纸里透出来的，压纸杆和打字头压在字前面（见 src/scripts/desk-3d.ts）。
+         没有 WebGL / 拉不到 chunk / 窄屏 → 这个类不会挂上，一直显示 CSS 那台。 -->
+    <canvas class="desk3d" id="desk3d" aria-hidden="true"></canvas>
+
+    <!-- 光的四层：都固定在视口里（光打在场里，纸从光里滚过去）。
+         lamp 乘、glow 屏、grain 与 dust 只是叠上去，全部不吃指针。
+         只有 lamp / glow 会被 JS 挪位置，而且挪的是 transform。 -->
+    <div class="desklamp" aria-hidden="true"></div>
+    <div class="deskglow" aria-hidden="true"></div>
+    <div class="deskdust" aria-hidden="true"></div>
+    <div class="deskgrain" aria-hidden="true"></div>
+    <div class="deskveil" aria-hidden="true"></div>
+
+    <!-- 机器：底下压着的一条固定台面。台车 / 打字杆 / 铃 / 卷筒全在这里，
+         它们的位移只由 CSS 变量驱动（--car-x 等，见 desk-machine.ts）。
+         三维那台起来之后这一条只剩「量事」的盒子（轨道、标尺），可见件让位给 canvas。 -->
+    <div class="machine" id="machine">
+      <div class="machine__band">
+        <div class="inset">
+          <div class="rail" id="rail" aria-hidden="true">
+            <span class="bell"></span>
+            <span class="carriage"><i class="typebar"></i></span>
+          </div>
+          <!-- 列标尺：轨道下面那一条，记号跟着台车走 = 光标在第几列。
+               刻度用 repeating 渐变画（一格 = 一个等宽字符，十条一组），不建 DOM -->
+          <div class="ruler" id="ruler" aria-hidden="true"><i class="ruler__mark"></i></div>
+        </div>
+        <div class="frame" aria-hidden="true">
+          <div class="platen">
+            <i class="knob knob--l"></i>
+            <i class="paperlip"></i>
+            <i class="knob knob--r"></i>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="readguide__line"></div>
-    <span class="readguide__ball"></span>
+
+    <!-- 调光台：右侧抽屉。关掉时整层 inert（Tab 进不去、点不到），不是只藏起来。 -->
+    <aside class="studio" id="studio" data-lenis-prevent inert={true} aria-label="写作台灯光与纸面">
+      <div class="studio__head">
+        <span class="studio__title">调光台</span>
+        <button type="button" class="studio__close" id="studio-close" aria-label="关闭调光台">×</button>
+      </div>
+
+      <div class="grp">
+        <span class="grp__title">主题</span>
+        <div class="swatches" role="radiogroup" aria-label="主题">
+          {THEMES.map((t) => (
+            <button type="button" class="swatch" role="radio" aria-checked="false"
+              data-desk-theme-card={t.id} data-desk-theme={t.id}>
+              <span class="swatch__face"><i class="swatch__ink">Aa</i><i class="swatch__rule"></i></span>
+              <span class="swatch__name">{t.name}</span>
+              <span class="swatch__note">{t.note}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div class="grp">
+        <span class="grp__title">灯</span>
+        <div class="presets">
+          <button type="button" data-desk-preset="off">灭</button>
+          <button type="button" data-desk-preset="balanced">均衡</button>
+          <button type="button" data-desk-preset="cinematic">电影感</button>
+        </div>
+      </div>
+
+      {GROUPS.map((g) => (
+        <div class="grp">
+          <span class="grp__title">{g.title}</span>
+          {g.items.map((it) => {
+            const r = RANGES[it.k];
+            return (
+              <label class="ctl">
+                <span class="ctl__name">{it.label}</span>
+                <input type="range" data-desk={it.k} min={r.min} max={r.max} step={r.step}>
+                <output class="ctl__out" data-out={it.k}></output>
+              </label>
+            );
+          })}
+        </div>
+      ))}
+
+      <div class="grp">
+        <span class="grp__title">开关</span>
+        {TOGGLES.map((t) => (
+          <label class="ctl ctl--switch">
+            <span class="ctl__name">{t.label}</span>
+            <button type="button" class="sw" data-desk-toggle={t.k} aria-pressed="false"><i></i></button>
+          </label>
+        ))}
+      </div>
+    </aside>
+
+    <!-- 阅读导引：和文章详情页同一份标记、同一份脚本（src/scripts/readguide.ts） -->
+    <div class="readguide" aria-hidden="true">
+      <div class="readguide__ruler">
+        <div class="readguide__track"><div class="readguide__body"></div></div>
+      </div>
+      <div class="readguide__line"></div>
+      <span class="readguide__ball"></span>
+    </div>
   </div>
 </Base>
 <script>
   import { startReadguide } from '../../scripts/readguide';
+  import { startMachine } from '../../scripts/desk-machine';
+  import { createDeskSound } from '../../scripts/desk-sound';
+  import { startDeskPaper } from '../../scripts/desk-paper';
+  import { createInk } from '../../scripts/desk-ink';
+  import {
+    applyDesk,
+    loadDesk,
+    saveDesk,
+    startStudio,
+    type DeskSettings,
+  } from '../../scripts/desk-studio';
+  import type { MarkdownRenderer } from '../../lib/render';
 
   const paper = document.getElementById('page') as HTMLElement;
   const guide = document.querySelector<HTMLElement>('.readguide')!;
   const desk = document.getElementById('desk') as HTMLElement;
-  const col = desk.dataset.column ?? '';
-  const mode = desk.dataset.mode === 'edit' ? 'edit' : 'new';
-  const fixedSlug = desk.dataset.slug ?? '';
+  const rail = document.getElementById('rail') as HTMLElement;
+  const canvas3d = document.getElementById('desk3d') as HTMLCanvasElement;
+  const ruler = document.getElementById('ruler') as HTMLElement;
+  const band = document.querySelector<HTMLElement>('.machine__band')!;
+  const inset = document.querySelector<HTMLElement>('.inset')!;
+  const studioEl = document.getElementById('studio') as HTMLElement;
+  const studioBtn = document.getElementById('studio-btn') as HTMLButtonElement;
   const titleEl = document.getElementById('f-title') as HTMLInputElement;
   const slugEl = document.getElementById('f-slug') as HTMLInputElement;
-  const bodyEl = document.getElementById('f-body') as HTMLTextAreaElement;
   const msgEl = document.getElementById('msg')!;
   const mTitle = document.getElementById('m-title')!;
-  const hintTpl = document.getElementById('hint') as HTMLTemplateElement;
   // 减动效下不给纸面加淡入：内容该换还是换，只是不要那一下掩护
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const rg = startReadguide(paper, guide);
+  const sound = createDeskSound();
 
-  // 新建的草稿按栏目存，编辑的按「栏目 + 地址」存 —— 改哪篇文章的草稿不会串到另一篇上
-  const DRAFT = mode === 'edit' ? `blog-draft:${col}:${fixedSlug}` : `blog-draft:${col}`;
+  // ---- 设置：localStorage 里那份，改了立刻夹一遍区间再落盘 ----
+  // 抽屉里的旋钮和顶栏那三颗钮是同一批状态的两个入口，所以改完要把两边一起回写
+  let sync: (() => void) | null = null;
+  let settings = loadDesk();
+  applyDesk(settings);
+  // 上次开着声音就要在这儿渲那几段 PCM。AudioContext 这会儿没手势，会被挂成 suspended，
+  // 而 play() 是在真按键里 resume 的 —— 所以不需要等用户先动一下。
+  // 只写在 patch() 里不够：那样「昨天开着、今天打开页面」是静音的，得关一下再开才响。
+  if (settings.sound) {
+    sound.setVolume(settings.volume);
+    void sound.enable();
+  }
+
+  function patch(p: Partial<DeskSettings>) {
+    const before = settings.sound;
+    const beforeFace = settings.typed;
+    settings = { ...settings, ...p };
+    applyDesk(settings);
+    saveDesk(settings);
+    // 换面孔：纸上的块要从「排好的节点」换成「等宽源文行」（反过来一样）
+    if (p.typed !== undefined && p.typed !== beforeFace) page?.setFace();
+    if (p.sound !== undefined && p.sound !== before) {
+      // 第一次出声要有用户手势才建得起 AudioContext，渲染那几个 PCM 也得等这会儿
+      if (settings.sound) {
+        sound.setVolume(settings.volume);
+        void sound.enable();
+      } else {
+        sound.disable();
+      }
+    }
+    if (p.volume !== undefined) sound.setVolume(settings.volume);
+    sync?.();
+    // 字号、行距、主题都改纸面版位：轨道和台车得跟着重量一次
+    syncRail();
+  }
+
+  sync = startStudio([studioEl, document.querySelector<HTMLElement>('.deskbar')!], () => settings, patch).sync;
+
+  function setDrawer(open: boolean) {
+    studioEl.classList.toggle('is-open', open);
+    if (open) studioEl.removeAttribute('inert');
+    else studioEl.setAttribute('inert', '');
+    studioBtn.setAttribute('aria-expanded', String(open));
+  }
+  setDrawer(false);
+
+  studioBtn.addEventListener('click', () => setDrawer(!studioEl.classList.contains('is-open')));
+  document.getElementById('studio-close')!.addEventListener('click', () => setDrawer(false));
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setDrawer(false);
+  });
+
+  // ---- 轨道对准正文那一栏 ----
+  // 台车 x 就是「光标在轨道上的偏移」，前提写着硬：轨道的宽度和左缘 = 正在编辑的那一栏文字。
+  // 正文现在住在纸里（不再是机器上那张 sheet），所以这两个值要从纸面量回来写给轨道。
+  let page: ReturnType<typeof startDeskPaper> | null = null;
+  let desk3d: Awaited<ReturnType<typeof import('../../scripts/desk-3d').startDesk3d>> = null;
+  const root = document.documentElement;
+  function syncRail() {
+    const m = page?.measure();
+    if (!m) return;
+    const b = band.getBoundingClientRect();
+    const padL = Number.parseFloat(getComputedStyle(inset).paddingLeft) || 0;
+    const left = `${Math.max(0, m.left - b.left - padL)}px`;
+    // 标尺要和轨道一模一样宽、一模一样左对齐 —— 不然记号指的不是光标那一列
+    for (const el of [rail, ruler]) {
+      el.style.width = `${m.width}px`;
+      el.style.marginLeft = left;
+    }
+    // 报头那行字对齐到同一栏：CSS 里的 --desk-gutter 按 100vw 算，量出来的是去掉滚动条的宽度，
+    // Windows 上差着一根滚动条的宽度（实测 15px）—— 现量现写，两边永远一条线
+    root.style.setProperty('--desk-gutter', `${Math.round(m.left)}px`);
+    // 机器那一台的宽度、落影、纸舌全都以「纸有多宽」为准 —— 同样不能拿 100vw 去算（同上）
+    root.style.setProperty('--desk-sheet-w', `${Math.round(paper.getBoundingClientRect().width)}px`);
+    // 三维那台的版位和这一条是同一个出处；它内部按 key 比对，没变就不重建模型
+    desk3d?.refresh();
+  }
+
+  // ---- 排版引擎：第一次真要排的时候才拉进来（那片 768KB 只该出现在这一页） ----
+  let enginePromise: Promise<MarkdownRenderer> | null = null;
+  function engine(): Promise<MarkdownRenderer> {
+    if (!enginePromise) {
+      say('加载排版引擎');
+      enginePromise = import('../../lib/render')
+        .then((m) => m.createRenderer())
+        .then((r) => {
+          say('');
+          return r;
+        });
+    }
+    return enginePromise;
+  }
+
+  function say(text: string, isError = false) {
+    msgEl.textContent = text;
+    msgEl.classList.toggle('is-error', isError);
+  }
+
+  // ---- 纸面就是编辑器 ----
+  // 压印那层建在纸之后、机器之前，但 onRescan 发生在 startDeskPaper 里就可能先要它 —— 先留个位
+  let ink: ReturnType<typeof createInk> | null = null;
+  page = startDeskPaper({
+    paper,
+    after: mTitle,
+    reduced,
+    typed: () => settings.typed,
+    engine,
+    onChange: (text) => {
+      mTitle.textContent = titleEl.value.trim() || '未命名';
+      storeDraft(text);
+      syncRail();
+    },
+    onRescan: () => {
+      rg.rescan();
+      syncRail();
+      // 重排会把这一块搬到新的位置上（前面插了一段、换块了），卷纸要跟着再判一次 ——
+      // 只挂在 selectionchange 上会漏掉这一种「光标没动、纸动了」
+      machine?.seek();
+      // 已经落下去那几笔存的是旧位置的文档坐标：块要是被搬走就得作废，
+      // 否则墨留在上一行继续淡出
+      ink?.recheck();
+    },
+  });
+
+  // ---- 压印：刚敲下去那个字重一档、墨往四周洇一点，420ms 落回普通印刷 ----
+  // 只认「真的往纸上落了一个字符」那一下（粘贴算最后一颗，删除不算 —— 和它一样）
+  // 建在机器之前：卷纸一推一收改的是文档坐标，已经落下去那几笔要跟着挪（机器在 onTuck 里调它）
+  ink = createInk(page.inputEl, reduced);
+  page.inputEl.addEventListener('input', () => ink?.strike());
+
+  // ---- 机器 ----
+  let machine: ReturnType<typeof startMachine> | null = null;
+  machine = startMachine({
+    input: page.inputEl,
+    rail,
+    reduced,
+    // 压纸杆那一条线：三维那台起来了就按 desk-stage 算，没起来它自己退回轨道顶边
+    bail: () => desk3d?.platen() ?? null,
+    onTuck: (d) => {
+      ink?.shift(d);
+      // 标尺数的也是文档坐标：纸往下推一段，每一行的高度位置都跟着挪，得重新量一遍
+      rg.rescan();
+    },
+    onBell: () => {
+      machine?.ring();
+      if (settings.sound) sound.play('bell');
+    },
+    onReturn: () => {
+      if (settings.sound) sound.play('return');
+    },
+  });
+
+  // ---- 三维那台机器（three.js）----
+  // 只在桌面宽度起。起不来的每一条路 —— 拉不到 chunk、createMachine 返回 null（没有 WebGL）、
+  // 着色器还没编好 —— 都留在 CSS 那台上，判断就是 html 上有没有 desk3d-on 这个类：
+  // 它由 onReady 挂，而 onReady 只在真的能画之后才来，所以不会两台同时露出来。
+  if (innerWidth > 768) {
+    void import('../../scripts/desk-3d')
+      .then((m) =>
+        m.startDesk3d({
+          canvas: canvas3d,
+          paper,
+          input: page.inputEl,
+          settings: () => settings,
+          readout: () => machine?.readout() ?? null,
+          reduced,
+          onReady: () => root.classList.add('desk3d-on'),
+        }),
+      )
+      .then((d) => {
+        desk3d = d;
+        if (!d) return;
+        // 挂在统一那条 rAF 上，不自起第二个循环（全站规矩）
+        const fx: ((...a: any[]) => void)[] = ((window as any).__fx ??= []);
+        if (!fx.includes(tick3d)) fx.push(tick3d);
+      })
+      .catch((e) => {
+        // 起不来就一直用 CSS 那台。⚠ 但不能不吭声：这条链上任何一个数写错，表现都是
+        // 「机器就是不出来，而 console 干干净净」（全站那条老坑）。留一行 warn。
+        console.warn('三维机器没起来，留在 CSS 那台', e);
+      });
+  }
+  let last3d = '';
+  function tick3d() {
+    const d = desk3d;
+    if (!d || !root.classList.contains('desk3d-on')) return;
+    const r = machine?.readout();
+    if (!r) return;
+    // 量化比对：只有真动了的那一帧才画。它那份控制器也是这么办的（把状态乘成整数再比）
+    const k = [
+      Math.round(r.headX * 4),
+      Math.round(r.sway * 2000),
+      Math.round(r.strike * 40),
+      Math.round(r.vibrator * 40),
+      Math.round(r.platenTurn * 3600),
+      Math.round(r.spool * 100),
+      settings.intensity > 0.001 ? 1 : 0,
+    ].join(',');
+    if (k === last3d) return;
+    last3d = k;
+    d.frame();
+  }
+
+  // ---- 纸面 ----
+  const colSlug = desk.dataset.column ?? '';
+  const mode = desk.dataset.mode === 'edit' ? 'edit' : 'new';
+  const fixedSlug = desk.dataset.slug ?? '';
+  const DRAFT_KEY = mode === 'edit' ? `blog-draft:${colSlug}:${fixedSlug}` : `blog-draft:${colSlug}`;
   // 中文标题转不出 ASCII 的 slug，兜底给一个带时间的名字（认得出，也不撞车）
   const now = new Date();
   const p2 = (n: number) => String(n).padStart(2, '0');
@@ -130,90 +491,46 @@ const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
       .replace(/^-+|-+$/g, '')
       .slice(0, 60);
 
-  // ---- 大标题以下整体换成排好的正文 ----
-  // 渲染结果必须直接挂在 .prose 底下当子元素：阅读导引扫的就是 paper.children，
-  // 中间套一层 div 的话标题就不是直接子元素，长刻度和红球全都数不到。
-  function setBody(html: string) {
-    while (mTitle.nextSibling) mTitle.nextSibling.remove();
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    while (tmp.firstChild) paper.appendChild(tmp.firstChild);
-    if (!html.trim()) paper.appendChild(hintTpl.content.cloneNode(true));
-    // 整段正文是在这一帧里被换掉的，而写作台每停手 350ms 就重新排一次 ——
-    // 这是全站唯一一处「内容凭空换掉、什么都没有交代」的地方：纸上跳一下，
-    // 左侧标尺和红球还硬切到新位置（那一条由 readguide 的 rescan 管）。
-    // 给纸面一次很浅的淡入就够：只动 opacity、只有一个元素、走合成层。
-    // 别改成「给每个新块各挂一条动画」—— 那份 12k px 的笔记有三百多个顶层块，
-    // 等于每次排版建三百条动画，代价全花在掩护一个 130ms 的落位上。
-    if (!reduced) {
-      paper.animate([{ opacity: 0.9 }, { opacity: 1 }], { duration: 130, easing: 'ease-out' });
-    }
-  }
-
-  // 排版引擎只在真要排版时才拉进来（shiki 的语法包和 KaTeX 加起来不小，
-  // 而且只有这一页用得上，不该进其他页的包）
-  let renderMarkdown: ((markdown: string) => Promise<string>) | null = null;
-  async function renderer() {
-    if (!renderMarkdown) {
-      say('加载排版引擎');
-      const { createRenderer } = await import('../../lib/render');
-      renderMarkdown = (await createRenderer()).render;
-    }
-    return renderMarkdown;
-  }
-
-  function say(text: string, isError = false) {
-    msgEl.textContent = text;
-    msgEl.classList.toggle('is-error', isError);
-  }
-
-  let timer = 0;
   let draftTimer = 0;
-  function schedule() {
-    clearTimeout(timer);
-    timer = window.setTimeout(refresh, 350);
+  /** 每停手 400ms 落一次草稿。保存成功才清（这条规矩没改过） */
+  function storeDraft(text: string) {
     clearTimeout(draftTimer);
-    draftTimer = window.setTimeout(storeDraft, 700);
-  }
-
-  async function refresh() {
-    const md = bodyEl.value;
-    mTitle.textContent = titleEl.value.trim() || '未命名';
-    if (!md.trim()) {
-      setBody('');
-      rg.rescan();
-      return;
-    }
-    say('排版中');
-    try {
-      const render = await renderer();
-      const html = await render(md);
-      // 等结果这段时间里用户又敲了字就丢掉这一份，排下一轮
-      if (bodyEl.value !== md) return schedule();
-      setBody(html);
-      say('');
-    } catch (e) {
-      say((e as Error).message, true);
-    }
-    rg.rescan();
-  }
-
-  function storeDraft() {
-    try {
-      localStorage.setItem(DRAFT, JSON.stringify({ title: titleEl.value, slug: slugEl.value, body: bodyEl.value }));
-    } catch {}
+    draftTimer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({ title: titleEl.value, slug: slugEl.value, body: text }),
+        );
+      } catch {}
+    }, 400);
   }
 
   let slugTouched = mode === 'edit';
   slugEl.addEventListener('input', () => {
     slugTouched = true;
-    schedule();
+    storeDraft(page!.text);
   });
   titleEl.addEventListener('input', () => {
     if (!slugTouched) slugEl.value = slugify(titleEl.value) || fallbackSlug;
-    schedule();
+    mTitle.textContent = titleEl.value.trim() || '未命名';
+    storeDraft(page!.text);
   });
-  bodyEl.addEventListener('input', schedule);
+
+  // 击键的声与那一下打字杆：只认「真的往纸上落了一个字符」的键
+  page.inputEl.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Enter') {
+      machine?.lineFeed();
+      if (settings.sound) sound.play('key');
+      return;
+    }
+    if (e.key.length === 1) {
+      machine?.strikeKey();
+      if (settings.sound) sound.play('key');
+    } else if (e.key === 'Backspace') {
+      machine?.strikeKey();
+    }
+  });
 
   let saving = false;
   async function saveArticle() {
@@ -221,31 +538,28 @@ const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
     saving = true;
     say('保存中');
     try {
-      const render = await renderer();
-      const html = await render(bodyEl.value);
       const res = await fetch('/write/api/post', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           mode,
-          column: col,
+          column: colSlug,
           title: titleEl.value.trim(),
           slug: mode === 'edit' ? fixedSlug : slugEl.value.trim(),
-          markdown: bodyEl.value,
-          html,
+          // 只交源文。排好的 HTML 不再进库 —— 文章页在读者浏览器里排同一份（render.ts 那一份）
+          markdown: page!.text,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       if (!res.ok || !data.url) throw new Error(data.error ?? `HTTP ${res.status}`);
       try {
-        localStorage.removeItem(DRAFT);
+        localStorage.removeItem(DRAFT_KEY);
       } catch {}
       say('已存好');
       // 这句话得真的被画出来。以前下一句就是 location.assign，同一个任务里就跳走了，
       // 于是全站情绪最高的那一刻 —— 文章确实进库了 —— 渲染为零，作者什么也没看见。
       // 留 400ms 让它落地再走：短到不打断手感，长到眼睛跟得上。
-      // 这 400ms 里 saving 不放手，顺手把「再按一次 Cmd+S 又往库里写一遍」堵住
-      //（以前没有这道闸，双击就能连发两次 POST）。
+      // 这 400ms 里 saving 不放手，顺手把「再按一次 Ctrl+S 又往库里写一遍」堵住。
       window.setTimeout(() => location.assign(data.url), 400);
     } catch (e) {
       saving = false;   // 失败要能立刻再存一次，所以只在失败这条路上放行
@@ -264,17 +578,28 @@ const shown = post ? fmtDate(new Date(`${post.date}T00:00:00`)) : today;
     }
   });
 
-  // 草稿回来：只在写作台是空的时候填。编辑已有文章时 textarea 由服务端填好了，
-  // 这里就不会动它 —— 免得把本地留过的旧草稿盖到线上那篇上
-  try {
-    const raw = localStorage.getItem(DRAFT);
-    if (raw && !titleEl.value && !slugEl.value && !bodyEl.value) {
-      const d = JSON.parse(raw);
-      titleEl.value = d.title ?? '';
-      slugEl.value = d.slug ?? '';
-      bodyEl.value = d.body ?? '';
+  // 起手那一份：编辑就有库里的源文（服务端挂在纸面的 data-body 上），新建才认本地草稿。
+  // 顺序不能反 —— 编辑已有文章时把本地旧草稿灌进来，等于拿没落盘的东西盖线上那篇。
+  const seeded = paper.dataset.body ?? '';
+  if (seeded) {
+    page!.setText(seeded);
+  } else {
+    let draft: { title?: string; slug?: string; body?: string } = {};
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw && !titleEl.value && !slugEl.value) draft = JSON.parse(raw);
+    } catch {
+      draft = {};
     }
-  } catch {}
+    if (typeof draft.body === 'string') {
+      titleEl.value = draft.title ?? '';
+      slugEl.value = draft.slug ?? '';
+    }
+    page!.setText(draft.body ?? '');
+  }
 
-  refresh();
+  // 纸面撑开之后轨道才量得准；字体晚一步到位，那一版字号也可能不一样
+  document.fonts?.ready.then(() => syncRail());
+  addEventListener('resize', () => syncRail());
+  page.inputEl.focus();
 </script>
